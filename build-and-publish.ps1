@@ -58,23 +58,22 @@ New-Item -ItemType Directory -Force -Path $installerOutputDir | Out-Null
 Write-Host "[2/3] Executing dotnet publish..." -ForegroundColor Green
 $dotnetArgs = @(
     "publish",
-    "`"$projectFile`"",
+    $projectFile,
     "-c", $Configuration,
     "-r", $Runtime,
     "-p:Platform=x64",
     "--self-contained", "true",
     "-p:WindowsPackageType=None",
     "-p:PublishSingleFile=false",
-    "-o", "`"$stagingDir`""
+    "-o", $stagingDir
 )
 
-$publishCmd = "dotnet " + ($dotnetArgs -join " ")
-Write-Host "Running: $publishCmd" -ForegroundColor Gray
-$process = Start-Process -FilePath "dotnet" -ArgumentList ($dotnetArgs -join " ") -Wait -NoNewWindow -PassThru
+Write-Host "Running: dotnet $($dotnetArgs -join ' ')" -ForegroundColor Gray
+& dotnet @dotnetArgs
 
-if ($process.ExitCode -ne 0) {
-    Write-Host "Error: dotnet publish failed with exit code $($process.ExitCode)." -ForegroundColor Red
-    exit $process.ExitCode
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Error: dotnet publish failed with exit code $LASTEXITCODE." -ForegroundColor Red
+    exit $LASTEXITCODE
 }
 
 Write-Host "Publish completed successfully. Staged output ready at: $stagingDir" -ForegroundColor Green
@@ -126,10 +125,9 @@ if ($isccPath) {
     Write-Host "Found Inno Setup Compiler at: $isccPath" -ForegroundColor Cyan
     Write-Host "Compiling setup executable using $installerIss..." -ForegroundColor Green
 
-    $isccArgs = "`"$installerIss`""
-    $isccProcess = Start-Process -FilePath $isccPath -ArgumentList $isccArgs -Wait -NoNewWindow -PassThru
+    & $isccPath $installerIss
 
-    if ($isccProcess.ExitCode -eq 0) {
+    if ($LASTEXITCODE -eq 0) {
         $setupFile = Join-Path $installerOutputDir "RhythmHubSetup.exe"
         if (Test-Path $setupFile) {
             $fileSizeMB = [math]::Round((Get-Item $setupFile).Length / 1MB, 2)
@@ -142,8 +140,8 @@ if ($isccPath) {
             Write-Host "Warning: ISCC exited cleanly, but $setupFile was not found." -ForegroundColor Yellow
         }
     } else {
-        Write-Host "Error: ISCC compilation failed with exit code $($isccProcess.ExitCode)." -ForegroundColor Red
-        exit $isccProcess.ExitCode
+        Write-Host "Error: ISCC compilation failed with exit code $LASTEXITCODE." -ForegroundColor Red
+        exit $LASTEXITCODE
     }
 } else {
     Write-Host "------------------------------------------------------------" -ForegroundColor Yellow
