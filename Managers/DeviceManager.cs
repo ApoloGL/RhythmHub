@@ -174,6 +174,7 @@ public class DeviceManager : IDisposable
                 try
                 {
                     pnpDevices.AddRange(USBDevice.GetDevices(DeviceInterfaceIds.UsbDevice));
+                    pnpDevices.AddRange(USBDevice.GetDevices(Guid.Parse("88bae032-5a81-49f0-bc3d-a4ff138216d6")));
                     pnpDevices.AddRange(USBDevice.GetDevices(Guid.Parse("d5ff2009-46be-4b95-bdc7-e322cd81f57d")));
                 }
                 catch { }
@@ -189,29 +190,61 @@ public class DeviceManager : IDisposable
 
                     try
                     {
-                        // Match with WinUSB interfaces
-                        string winUsbDevPath = "";
-                        foreach (var p in pnpDevices)
+                        bool isWinUsbService = false;
+                        try
                         {
-                            string normPath = p.DevicePath.Replace('#', '\\');
-                            if (normPath.Contains(instanceId, StringComparison.OrdinalIgnoreCase))
+                            var pnpCheck = PnPDevice.GetDeviceByInstanceId(instanceId);
+                            string service = pnpCheck?.GetProperty<string>(DevicePropertyKey.Device_Service) ?? "";
+                            if (string.Equals(service, "WinUSB", StringComparison.OrdinalIgnoreCase))
                             {
-                                winUsbDevPath = p.DevicePath;
-                                break;
+                                isWinUsbService = true;
                             }
-                            try
+                            else
                             {
-                                var pnp = PnPDevice.GetDeviceByInterfaceId(p.DevicePath);
-                                if (pnp is not null && string.Equals(pnp.InstanceId, instanceId, StringComparison.OrdinalIgnoreCase))
+                                try
+                                {
+                                    var classGuid = pnpCheck?.GetProperty<Guid>(DevicePropertyKey.Device_ClassGuid);
+                                    if (classGuid == Guid.Parse("88bae032-5a81-49f0-bc3d-a4ff138216d6"))
+                                    {
+                                        isWinUsbService = true;
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+                        catch { }
+
+                        // Match with WinUSB interfaces only if the device is actually running WinUSB
+                        string winUsbDevPath = "";
+                        if (isWinUsbService)
+                        {
+                            foreach (var p in pnpDevices)
+                            {
+                                string normPath = p.DevicePath.Replace('#', '\\');
+                                if (normPath.Contains(instanceId, StringComparison.OrdinalIgnoreCase))
                                 {
                                     winUsbDevPath = p.DevicePath;
                                     break;
                                 }
+                                try
+                                {
+                                    var pnp = PnPDevice.GetDeviceByInterfaceId(p.DevicePath);
+                                    if (pnp is not null && string.Equals(pnp.InstanceId, instanceId, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        winUsbDevPath = p.DevicePath;
+                                        break;
+                                    }
+                                }
+                                catch { }
                             }
-                            catch { }
+
+                            if (string.IsNullOrEmpty(winUsbDevPath) && pnpDevices.Count > 0)
+                            {
+                                winUsbDevPath = pnpDevices[0].DevicePath;
+                            }
                         }
 
-                        bool hasWinUsb = !string.IsNullOrEmpty(winUsbDevPath);
+                        bool hasWinUsb = isWinUsbService && !string.IsNullOrEmpty(winUsbDevPath);
 
                         lock (_lock)
                         {
@@ -630,9 +663,48 @@ public class DeviceManager : IDisposable
         }
     }
 
-    public void ConnectCustomDevice(int vid, int pid, string name)
+    public async Task<(bool success, string message)> ResetSpecificDongleAsync(IDeviceProvider provider)
     {
-        Console.WriteLine($"ConnectCustomDevice called for {vid:X4}:{pid:X4} but is not currently supported in the UI for Xbox One dongles.");
+        try
+        {
+            string devName = provider.DeviceName;
+            string? instanceId = provider.InstanceId;
+
+            // 1. Stop and remove provider from active sessions
+            StopAndRemoveProvider(provider);
+            await Task.Delay(500);
+
+            // 2. Power-cycle USB port if instance ID is available, or refresh Devcon
+            if (!string.IsNullOrEmpty(instanceId))
+            {
+                try
+                {
+                    var pnp = PnPDevice.GetDeviceByInstanceId(instanceId);
+                    pnp?.ToUsbPnPDevice().CyclePort();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"CyclePort fallback to Devcon.Refresh: {ex.Message}");
+                    Devcon.Refresh();
+                }
+            }
+            else
+            {
+                Devcon.Refresh();
+            }
+
+            // 3. Give the USB bus time to settle and re-enumerate
+            await Task.Delay(1500);
+
+            // 4. Re-scan devices to pick up and initialize the fresh provider
+            ScanForDevices();
+
+            return (true, $"Reset {devName} successfully.");
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Failed to reset dongle: {ex.Message}");
+        }
     }
 
     private void StartProvider(IDeviceProvider provider)

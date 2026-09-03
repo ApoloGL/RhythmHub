@@ -20,12 +20,28 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
     private USBDevice? _winUsbDevice;
     private USBInterface? _mainInterface;
     private readonly HashSet<byte> _connectedClients = new();
+
+    // Reusable buffers for zero-allocation hot loop
+    private readonly InstrumentState[] _clientStates = new InstrumentState[8];
+    private readonly byte[] _ackPacket = new byte[15]
+    {
+        0x01, 0x20, 0x00, 0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+    private readonly byte[] _pokePacket = new byte[12]
+    {
+        0x22, 0x00, 0x00, 0x08, 0x02, 0x08, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
     
     public XboxOneGhlProvider(string devicePath, string deviceName = "GHLive Guitar (Xbox One WinUSB)", string? instanceId = null)
     {
         _devicePath = devicePath;
         DeviceName = deviceName;
         InstanceId = instanceId;
+
+        for (int i = 0; i < _clientStates.Length; i++)
+        {
+            _clientStates[i] = new InstrumentState();
+        }
     }
 
     public async Task StartListeningAsync(Action<int, InstrumentState> onStateChanged, CancellationToken token)
@@ -171,7 +187,8 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
                             else if (cmdId == 0x21)
                             {
                                 IsSynced = true;
-                                var state = TranslateGhlPacket(readBuffer, offset, totalMsgLen);
+                                var state = _clientStates[clientId];
+                                ParseGhlPacket(readBuffer, offset, totalMsgLen, state);
                                 try
                                 {
                                     onStateChanged(clientId, state);
@@ -205,6 +222,7 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
             })
             {
                 IsBackground = true,
+                Priority = ThreadPriority.Highest,
                 Name = "XboxOneGhl_ReadThread"
             };
 
@@ -213,7 +231,7 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
             // Await cancellation or until the read thread finishes
             while (readThread.IsAlive && !token.IsCancellationRequested)
             {
-                await Task.Delay(100, CancellationToken.None);
+                await Task.Delay(100, CancellationToken.None).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)
@@ -298,8 +316,11 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
 
                         foreach (var client in clients)
                         {
-                            byte[] pokeData = { 0x22, client, 0x00, 0x08, 0x02, 0x08, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00 };
-                            _mainInterface.OutPipe.Write(pokeData);
+                            lock (_pokePacket)
+                            {
+                                _pokePacket[1] = client;
+                                _mainInterface.OutPipe.Write(_pokePacket);
+                            }
                         }
                     }
                 }
@@ -310,7 +331,7 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
                 }
 
                 // GHL Keep-Alive interval is strictly 8 seconds (GHL_GUITAR_POKE_INTERVAL)
-                await Task.Delay(8000, token);
+                await Task.Delay(8000, token).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)
@@ -326,30 +347,25 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
     private void SendAck(byte commandId, byte flagsClient, byte sequence, int bytesReceived)
     {
         byte clientId = (byte)(flagsClient & 0x07);
-        byte[] ackPacket = new byte[15];
-        ackPacket[0] = 0x01; // CommandId: Protocol Control
-        ackPacket[1] = (byte)(0x20 | clientId); // System Command | ClientId
-        ackPacket[2] = sequence;
-        ackPacket[3] = 0x0B; // Payload length = 11 bytes
+        int payloadLength = bytesReceived > 4 ? bytesReceived - 4 : 0;
 
-        ackPacket[4] = 0x00; // ControlCode: Ack
-        ackPacket[5] = commandId; // RefMessageType
-        ackPacket[6] = (byte)((flagsClient & 0x20) | clientId); // RefFlags | Client
-        int payloadLength = Math.Max(0, bytesReceived - 4);
-        ackPacket[7] = (byte)(payloadLength & 0xFF);
-        ackPacket[8] = (byte)((payloadLength >> 8) & 0xFF);
-        ackPacket[9] = (byte)((payloadLength >> 16) & 0xFF);
-        ackPacket[10] = (byte)((payloadLength >> 24) & 0xFF);
-        ackPacket[11] = 0x00; // Remaining buffer (4 bytes)
-        ackPacket[12] = 0x00;
-        ackPacket[13] = 0x00;
-        ackPacket[14] = 0x00;
-
-        try
+        lock (_ackPacket)
         {
-            _mainInterface?.OutPipe?.Write(ackPacket);
+            _ackPacket[1] = (byte)(0x20 | clientId);
+            _ackPacket[2] = sequence;
+            _ackPacket[5] = commandId;
+            _ackPacket[6] = (byte)((flagsClient & 0x20) | clientId);
+            _ackPacket[7] = (byte)(payloadLength & 0xFF);
+            _ackPacket[8] = (byte)((payloadLength >> 8) & 0xFF);
+            _ackPacket[9] = (byte)((payloadLength >> 16) & 0xFF);
+            _ackPacket[10] = (byte)((payloadLength >> 24) & 0xFF);
+
+            try
+            {
+                _mainInterface?.OutPipe?.Write(_ackPacket);
+            }
+            catch { }
         }
-        catch { }
     }
 
     private int FindGipOffset(byte[] data, int length, out byte clientId)
@@ -374,16 +390,16 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
         return -1;
     }
 
-    private InstrumentState TranslateGhlPacket(byte[] data, int offset, int length)
+    private static void ParseGhlPacket(byte[] data, int offset, int length, InstrumentState state)
     {
-        var state = new InstrumentState();
-        
         // Ensure we have at least 14 bytes of payload (length = 4 bytes header + 14 bytes payload = 18 bytes total)
-        if (length < 18) return state;
+        if (length < 18) return;
 
-        // Parse GHLive-specific 0x21 packets
-        ushort buttons = BitConverter.ToUInt16(data, offset + 4);
-        
+        // Fast bitwise extraction of 16-bit button mask (little-endian)
+        int btnLo = data[offset + 4];
+        int btnHi = data[offset + 5];
+        int buttons = btnLo | (btnHi << 8);
+
         // White1 = 0x0001, Black1 = 0x0002, Black2 = 0x0004, Black3 = 0x0008, White2 = 0x0010, White3 = 0x0020
         state.Blue = (buttons & 0x0001) != 0;    // White 1
         state.Green = (buttons & 0x0002) != 0;   // Black 1
@@ -398,27 +414,34 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
 
         byte dpad = data[offset + 6]; // offset 2 in payload
         state.DpadUp = dpad == 0 || dpad == 1 || dpad == 7;
-        state.DpadDown = dpad == 3 || dpad == 4 || dpad == 5;
-        state.DpadLeft = dpad == 5 || dpad == 6 || dpad == 7;
-        state.DpadRight = dpad == 1 || dpad == 2 || dpad == 3;
+        state.DpadDown = dpad >= 3 && dpad <= 5;
+        state.DpadLeft = dpad >= 5 && dpad <= 7;
+        state.DpadRight = dpad >= 1 && dpad <= 3;
 
         byte strum = data[offset + 8]; // offset 4 in payload
         // Strum bar rests at 128 (0x80), 0 is Strum Up, 255 is Strum Down.
         // Deadzone of 20 prevents mechanical jitter
-        state.StrumUp = strum < (128 - 20);
-        state.StrumDown = strum > (128 + 20);
+        state.StrumUp = strum < 108;   // 128 - 20
+        state.StrumDown = strum > 148; // 128 + 20
 
         byte whammy = data[offset + 10]; // offset 6 in payload
-        // Whammy rests at 128, goes to 255. Add a small deadzone to prevent resting jitter (blips).
-        float whammyVal = (whammy - 128f) / 127f;
-        state.Whammy = whammyVal < 0.1f ? 0f : whammyVal;
+        // Whammy rests at 128, goes to 255. Add deadzone to prevent resting jitter.
+        if (whammy > 140)
+        {
+            state.Whammy = (whammy - 128) * (1.0f / 127.0f);
+        }
+        else
+        {
+            state.Whammy = 0.0f;
+        }
 
         if (length >= 24)
         {
-            byte tilt = data[offset + 23]; // offset 19 in payload
-            state.Tilt = tilt / 255f;
+            state.Tilt = data[offset + 23] * (1.0f / 255.0f);
         }
-
-        return state;
+        else
+        {
+            state.Tilt = 0.0f;
+        }
     }
 }

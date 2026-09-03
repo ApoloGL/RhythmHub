@@ -36,7 +36,7 @@ public partial class MainViewModel : ObservableObject
         // Add devices that were found during the constructor's initial sweep
         foreach (var provider in _deviceManager.GetActiveProviders())
         {
-            var vm = new DeviceViewModel(provider, RevertXboxDriverCommand, SwitchToWinUsbDriverCommand);
+            var vm = new DeviceViewModel(provider, ResetDongleCommand, RevertXboxDriverCommand, SwitchToWinUsbDriverCommand);
             ConnectedDevices.Add(vm);
             if (SelectedDevice == null)
                 SelectedDevice = vm;
@@ -212,44 +212,37 @@ public partial class MainViewModel : ObservableObject
         await PerformScan();
     }
 
-    [ObservableProperty]
-    private string _customVid = "";
-
-    [ObservableProperty]
-    private string _customPid = "";
-
-    [ObservableProperty]
-    private string _customName = "";
-
     [RelayCommand]
-    private void ConnectManual()
+    private async Task ResetDongle(DeviceViewModel device)
     {
-        if (string.IsNullOrWhiteSpace(CustomVid) || string.IsNullOrWhiteSpace(CustomPid))
-        {
-            DeviceManager_OnHotplugEvent("Input Error", "Please provide both VID and PID (e.g., 1430 and 079B).", Microsoft.UI.Xaml.Controls.InfoBarSeverity.Error);
-            return;
-        }
+        if (device?.Provider == null) return;
 
+        DeviceManager_OnHotplugEvent("Refreshing Dongle", $"Resetting {device.DeviceName}... Please wait.", Microsoft.UI.Xaml.Controls.InfoBarSeverity.Informational);
+
+        _isSwappingDriverMain = true;
         try
         {
-            int vid = Convert.ToInt32(CustomVid.Trim(), 16);
-            int pid = Convert.ToInt32(CustomPid.Trim(), 16);
-            string name = string.IsNullOrWhiteSpace(CustomName) ? "Custom Device" : CustomName.Trim();
+            var (success, resultMessage) = await _deviceManager.ResetSpecificDongleAsync(device.Provider);
 
-            _deviceManager.ConnectCustomDevice(vid, pid, name);
-            DeviceManager_OnHotplugEvent("Device Added", $"Attempted manual connection for VID: 0x{vid:X4}, PID: 0x{pid:X4}.", Microsoft.UI.Xaml.Controls.InfoBarSeverity.Informational);
-            _ = PerformScan();
+            if (success)
+            {
+                await Task.Delay(1000);
+                await PerformScan();
+            }
+
+            DeviceManager_OnHotplugEvent(
+                success ? "Dongle Refreshed" : "Reset Failed",
+                resultMessage,
+                success ? Microsoft.UI.Xaml.Controls.InfoBarSeverity.Success : Microsoft.UI.Xaml.Controls.InfoBarSeverity.Error);
         }
         catch (Exception ex)
         {
-            DeviceManager_OnHotplugEvent("Parse Error", $"Invalid hex format: {ex.Message}", Microsoft.UI.Xaml.Controls.InfoBarSeverity.Error);
+            DeviceManager_OnHotplugEvent("Reset Failed", ex.Message, Microsoft.UI.Xaml.Controls.InfoBarSeverity.Error);
         }
-    }
-
-    [RelayCommand]
-    private void RestartApp()
-    {
-        AppInstance.Restart("");
+        finally
+        {
+            _isSwappingDriverMain = false;
+        }
     }
 
     [RelayCommand]
@@ -336,7 +329,7 @@ public partial class MainViewModel : ObservableObject
                 ConnectedDevices.Remove(existingVm);
             }
 
-            var vm = new DeviceViewModel(provider, RevertXboxDriverCommand, SwitchToWinUsbDriverCommand);
+            var vm = new DeviceViewModel(provider, ResetDongleCommand, RevertXboxDriverCommand, SwitchToWinUsbDriverCommand);
             ConnectedDevices.Add(vm);
             IsEmptyState = false;
             

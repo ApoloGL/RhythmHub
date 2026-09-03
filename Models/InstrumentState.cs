@@ -23,4 +23,52 @@ public class InstrumentState
     
     public float Whammy { get; set; }
     public float Tilt { get; set; }
+
+    /// <summary>
+    /// Resets all inputs and axes to rest state without heap allocations.
+    /// </summary>
+    public void Reset()
+    {
+        Green = false;
+        Red = false;
+        Yellow = false;
+        Blue = false;
+        Orange = false;
+        White3 = false;
+        StrumUp = false;
+        StrumDown = false;
+        DpadUp = false;
+        DpadDown = false;
+        DpadLeft = false;
+        DpadRight = false;
+        HeroPower = false;
+        Start = false;
+        Select = false;
+        Whammy = 0.0f;
+        Tilt = 0.0f;
+    }
+
+    /// <summary>
+    /// Copies state from another instance without heap allocation.
+    /// </summary>
+    public void CopyFrom(InstrumentState source)
+    {
+        Green = source.Green;
+        Red = source.Red;
+        Yellow = source.Yellow;
+        Blue = source.Blue;
+        Orange = source.Orange;
+        White3 = source.White3;
+        StrumUp = source.StrumUp;
+        StrumDown = source.StrumDown;
+        DpadUp = source.DpadUp;
+        DpadDown = source.DpadDown;
+        DpadLeft = source.DpadLeft;
+        DpadRight = source.DpadRight;
+        HeroPower = source.HeroPower;
+        Start = source.Start;
+        Select = source.Select;
+        Whammy = source.Whammy;
+        Tilt = source.Tilt;
+    }
 }

@@ -452,3 +452,51 @@ $RECYCLE.BIN/
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+
+# ==========================================
+# Repository Cleanup & Security Hardening
+# ==========================================
+
+# C# / .NET Standards & IDE Cache
+[Bb]in/
+[Oo]bj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+.idea/
+*.sln.iml
+
+# Build & Installer Outputs
+dist/
+staged/
+Output/
+*_Setup.exe
+*Setup.exe
+*.exe
+!prerequisites/*.exe
+!prerequisites/**/*.exe
+
+# AI & IDE Specific Files
+.antigravity/
+.ai/
+.gemini/
+.copilot/
+copilot*.log
+*.copilotlog
+
+# Secrets, Keys & Certificates
+.env
+.env.*
+*.key
+secrets.json
+appsettings.Development.json
+appsettings.local.json
+*.pem
+*.crt
+*.cer
+*.pfx
+*.p12
+

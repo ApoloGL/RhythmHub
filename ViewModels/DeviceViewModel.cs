@@ -11,17 +11,13 @@ public partial class DeviceViewModel : ObservableObject
     [ObservableProperty] private bool _isWaitingForSync;
     [ObservableProperty] private SolidColorBrush _statusColor = new SolidColorBrush(Colors.Transparent);
 
-    public string SyncInstruction => Provider is Providers.XboxOneDefaultDriverProvider
-        ? "Running default Microsoft Xbox driver (LEDs active). Plays via GameInput/RB4IM. Switch to WinUSB to use RhythmHub's built-in mapper."
-        : "Please press the Sync button on your guitar!";
+    public string SyncInstruction => "Please press the Sync button on your guitar!";
 
     public string ProtocolName => Provider is Providers.XboxOneGhlProvider ? "Xbox One WinUSB" : "Xbox One Native HID";
     public string IconGlyph => "\xE990"; // Segoe Fluent Icons Gamepad
 
     public Microsoft.UI.Xaml.Visibility SyncInstructionVisibility => 
-        (IsWaitingForSync || Provider is Providers.XboxOneDefaultDriverProvider) 
-            ? Microsoft.UI.Xaml.Visibility.Visible 
-            : Microsoft.UI.Xaml.Visibility.Collapsed;
+        IsWaitingForSync ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
     public bool CanRevertDriver => Provider is Providers.XboxOneGhlProvider;
     public bool CanSwitchToWinUsb => Provider is Providers.XboxOneDefaultDriverProvider;
@@ -33,16 +29,18 @@ public partial class DeviceViewModel : ObservableObject
         CanSwitchToWinUsb ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
     public Providers.IDeviceProvider Provider { get; }
-
+    public CommunityToolkit.Mvvm.Input.IAsyncRelayCommand<DeviceViewModel> ResetDongleCommand { get; }
     public CommunityToolkit.Mvvm.Input.IAsyncRelayCommand<DeviceViewModel> RevertDriverCommand { get; }
     public CommunityToolkit.Mvvm.Input.IAsyncRelayCommand<DeviceViewModel> SwitchToWinUsbCommand { get; }
 
     public DeviceViewModel(
         Providers.IDeviceProvider provider, 
-        CommunityToolkit.Mvvm.Input.IAsyncRelayCommand<DeviceViewModel> revertCmd, 
+        CommunityToolkit.Mvvm.Input.IAsyncRelayCommand<DeviceViewModel> resetCmd,
+        CommunityToolkit.Mvvm.Input.IAsyncRelayCommand<DeviceViewModel> revertCmd,
         CommunityToolkit.Mvvm.Input.IAsyncRelayCommand<DeviceViewModel> switchCmd)
     {
         Provider = provider;
+        ResetDongleCommand = resetCmd;
         RevertDriverCommand = revertCmd;
         SwitchToWinUsbCommand = switchCmd;
         DeviceName = provider.DeviceName;
@@ -77,7 +75,6 @@ public partial class DeviceViewModel : ObservableObject
             }
             IsWaitingForSync = true;
         }
-        OnPropertyChanged(nameof(SyncInstruction));
         OnPropertyChanged(nameof(SyncInstructionVisibility));
         OnPropertyChanged(nameof(CanRevertDriver));
         OnPropertyChanged(nameof(CanSwitchToWinUsb));

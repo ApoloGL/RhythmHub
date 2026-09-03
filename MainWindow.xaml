@@ -11,46 +11,19 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Top Navigation / Action Bar -->
-        <Border Grid.Row="0" Background="{StaticResource CardBackgroundBrush}" Padding="20,15" BorderThickness="0,0,0,1" BorderBrush="#2A2A35">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+        <!-- Custom Title Bar -->
+        <Grid x:Name="AppTitleBar" Grid.Row="0" Height="48" Background="#16161C" BorderThickness="0,0,0,1" BorderBrush="#2A2A35">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
 
-                <TextBlock Text="RHYTHM HUB" Style="{StaticResource GamerTitleStyle}" VerticalAlignment="Center"/>
-
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10">
-                    <Button Content="Connect Custom..." Background="{StaticResource AccentBrush}" Foreground="White" BorderThickness="0">
-                        <Button.Flyout>
-                            <Flyout>
-                                <StackPanel Spacing="10" Width="200">
-                                    <TextBlock Text="Manual Connection" FontWeight="Bold"/>
-                                    <TextBox Header="Vendor ID (Hex)" Text="{x:Bind ViewModel.CustomVid, Mode=TwoWay}" PlaceholderText="e.g. 1430"/>
-                                    <TextBox Header="Product ID (Hex)" Text="{x:Bind ViewModel.CustomPid, Mode=TwoWay}" PlaceholderText="e.g. 0715"/>
-                                    <TextBox Header="Device Name" Text="{x:Bind ViewModel.CustomName, Mode=TwoWay}" PlaceholderText="My Custom Guitar"/>
-                                    <Button Content="Connect" Command="{x:Bind ViewModel.ConnectManualCommand}" HorizontalAlignment="Stretch" Margin="0,10,0,0"/>
-                                </StackPanel>
-                            </Flyout>
-                        </Button.Flyout>
-                    </Button>
-                    
-                    <Button Content="Diagnostics" Background="Transparent" BorderBrush="#3A3A45">
-                        <Button.Flyout>
-                            <Flyout>
-                                <ScrollViewer MaxHeight="400" MaxWidth="600">
-                                    <TextBlock Text="{x:Bind ViewModel.DiagnosticLog, Mode=OneWay}" FontFamily="Consolas" FontSize="12" TextWrapping="Wrap"/>
-                                </ScrollViewer>
-                            </Flyout>
-                        </Button.Flyout>
-                    </Button>
-
-                    <Button Content="Restart System" Command="{x:Bind ViewModel.RestartAppCommand}" Background="Transparent" BorderBrush="#3A3A45"/>
-                </StackPanel>
-            </Grid>
-        </Border>
+            <!-- App Logo + Title -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center" Margin="16,0,0,0">
+                <Image Source="ms-appx:///Assets/AppLogo.png" Height="24" Stretch="Uniform" VerticalAlignment="Center"/>
+                <TextBlock Text="RHYTHM HUB" Style="{StaticResource GamerTitleStyle}" VerticalAlignment="Center" FontSize="14"/>
+            </StackPanel>
+        </Grid>
 
         <!-- Main Content Area -->
         <Grid Grid.Row="1">
@@ -59,7 +32,7 @@
             <StackPanel Visibility="{x:Bind ViewModel.IsEmptyState, Mode=OneWay}" 
                         HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="15">
                 <TextBlock Text="NO DONGLES DETECTED" FontSize="24" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
-                <TextBlock Text="Plug in a receiver or manually connect a custom instrument above." Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
+                <TextBlock Text="Plug in a receiver to get started." Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
             </StackPanel>
 
             <!-- Grid of Cards -->
@@ -116,12 +89,24 @@
 
                                 <!-- Actions -->
                                 <StackPanel Grid.Row="2" Spacing="8">
+                                    <Button Command="{x:Bind ResetDongleCommand}" 
+                                            CommandParameter="{x:Bind}"
+                                            Background="#2D2D38" BorderBrush="#444455"
+                                            HorizontalAlignment="Stretch"
+                                            ToolTipService.ToolTip="Refresh and re-initialize this dongle">
+                                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                            <FontIcon Glyph="&#xE72C;" FontSize="13" Foreground="{StaticResource AccentBrush}"/>
+                                            <TextBlock Text="Reset Dongle" FontSize="13" FontWeight="SemiBold"/>
+                                        </StackPanel>
+                                    </Button>
+
                                     <Button Content="Revert to Default Driver" 
                                             Command="{x:Bind RevertDriverCommand}" 
                                             CommandParameter="{x:Bind}"
                                             Visibility="{x:Bind RevertDriverVisibility, Mode=OneWay}"
                                             Background="#2D2D38" BorderBrush="#444455"
                                             HorizontalAlignment="Stretch"
+                                            FontSize="12"
                                             ToolTipService.ToolTip="Restore factory Microsoft Xbox driver"/>
 
                                     <Button Content="Switch to WinUSB Driver" 
@@ -130,6 +115,7 @@
                                             Visibility="{x:Bind SwitchToWinUsbVisibility, Mode=OneWay}"
                                             Background="#0078D4" Foreground="White" BorderThickness="0"
                                             HorizontalAlignment="Stretch"
+                                            FontSize="12"
                                             ToolTipService.ToolTip="Install WinUSB driver to use RhythmHub's built-in mapper"/>
                                 </StackPanel>
                             </Grid>
