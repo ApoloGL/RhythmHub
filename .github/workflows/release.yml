@@ -22,6 +22,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
@@ -51,11 +53,19 @@ jobs:
           Write-Host "Verified installer executable exists at $setupPath" -ForegroundColor Green
 
       - name: Create GitHub Release & Upload Setup Executable
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ inputs.tag_name || github.ref_name }}
-          files: dist/installer/RhythmHubSetup.exe
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+        shell: powershell
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ inputs.tag_name }}"
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            $tag = "${{ github.ref_name }}"
+          }
+          if ([string]::IsNullOrWhiteSpace($tag) -or $tag -eq "master" -or $tag -eq "main") {
+            $tag = "v1.0.0"
+          }
+
+          Write-Host "Creating/Updating GitHub Release for tag: $tag..." -ForegroundColor Green
+
+          # Use GitHub CLI (gh) to create release, auto-generate notes, and attach installer
+          gh release create $tag "dist\installer\RhythmHubSetup.exe#RhythmHubSetup.exe" --title "RhythmHub $tag" --generate-notes --clobber
