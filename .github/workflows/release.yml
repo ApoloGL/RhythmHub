@@ -1,0 +1,47 @@
+name: Build & Automated Release Pipeline
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build, Package & Release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '6.0.x'
+
+      - name: Build Application & Compile Installer
+        shell: powershell
+        run: |
+          .\build-and-publish.ps1
+
+      - name: Verify Setup Executable Output
+        shell: powershell
+        run: |
+          $setupPath = "dist\installer\RhythmHubSetup.exe"
+          if (-not (Test-Path $setupPath)) {
+            Write-Error "Installer executable not found at $setupPath!"
+            exit 1
+          }
+          Write-Host "Verified installer executable exists at $setupPath" -ForegroundColor Green
+
+      - name: Create GitHub Release & Upload Setup Executable
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/installer/RhythmHubSetup.exe
+          generate_release_notes: true
+          draft: false
+          prerelease: false

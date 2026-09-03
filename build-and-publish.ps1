@@ -155,4 +155,9 @@ if ($isccPath) {
     Write-Host "    winget install --id JRSoftware.InnoSetup -e --accept-package-agreements --accept-source-agreements" -ForegroundColor BrightWhite
     Write-Host " 2. Re-run this script: .\build-and-publish.ps1" -ForegroundColor White
     Write-Host "------------------------------------------------------------" -ForegroundColor Yellow
+
+    if ($env:CI -eq "true" -or $env:GITHUB_ACTIONS -eq "true") {
+        Write-Host "Error: ISCC.exe is required in CI environment." -ForegroundColor Red
+        exit 1
+    }
 }

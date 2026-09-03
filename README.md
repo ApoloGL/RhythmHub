@@ -115,6 +115,26 @@ winget install --id JRSoftware.InnoSetup -e --accept-package-agreements --accept
 
 ---
 
+## Continuous Integration & Releasing
+
+RhythmHub features a fully automated GitHub Actions release workflow (`.github/workflows/release.yml`).
+
+Whenever a new version tag (e.g. `v1.0.0`) is pushed to GitHub, or when triggered manually via **workflow_dispatch** in the GitHub UI, the release pipeline will automatically:
+1. Provision a `windows-latest` runner with .NET 6 SDK and Inno Setup 6.
+2. Execute `build-and-publish.ps1` to produce self-contained WinUI 3 binaries and compile `RhythmHubSetup.exe`.
+3. Create a new GitHub Release with auto-generated release notes and attach `RhythmHubSetup.exe` as a release asset.
+
+### To Trigger an Automated Release:
+```powershell
+# Create a release tag
+git tag v1.0.0
+
+# Push tag to GitHub to trigger automated release
+git push origin v1.0.0
+```
+
+---
+
 ## Tech Stack & Architecture
 
 - **Language & Runtime**: C# 10 / .NET 6.0 (Self-Contained `win-x64`)
