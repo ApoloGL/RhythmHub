@@ -460,6 +460,11 @@ $RECYCLE.BIN/
 # C# / .NET Standards & IDE Cache
 [Bb]in/
 [Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Oo]ut/
+[Oo]utput/
+[Pp]ublish/
 .vs/
 *.user
 *.suo
@@ -470,9 +475,20 @@ $RECYCLE.BIN/
 *.sln.iml
 
 # Build & Installer Outputs
+[Dd]ist/
 dist/
+[Ss]taged/
 staged/
-Output/
+AppPackages/
+BundleArtifacts/
+[Dd]ebug/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+[Ww][Ii][Nn]32/
 *_Setup.exe
 *Setup.exe
 *.exe
