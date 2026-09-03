@@ -65,7 +65,15 @@ jobs:
             $tag = "v1.0.0"
           }
 
-          Write-Host "Creating/Updating GitHub Release for tag: $tag..." -ForegroundColor Green
+          $setupFile = "dist\installer\RhythmHubSetup.exe"
+          Write-Host "Target Release Tag: $tag" -ForegroundColor Green
 
-          # Use GitHub CLI (gh) to create release, auto-generate notes, and attach installer
-          gh release create $tag "dist\installer\RhythmHubSetup.exe#RhythmHubSetup.exe" --title "RhythmHub $tag" --generate-notes --clobber
+          # Check if the release already exists
+          $null = gh release view $tag 2>&1
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release $tag exists. Uploading and overwriting installer asset..." -ForegroundColor Yellow
+            gh release upload $tag "$setupFile#RhythmHubSetup.exe" --clobber
+          } else {
+            Write-Host "Creating new GitHub Release $tag..." -ForegroundColor Green
+            gh release create $tag "$setupFile#RhythmHubSetup.exe" --title "RhythmHub $tag" --generate-notes
+          }
