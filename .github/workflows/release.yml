@@ -68,10 +68,20 @@ jobs:
           $setupFile = "dist\installer\RhythmHubSetup.exe"
           Write-Host "Target Release Tag: $tag" -ForegroundColor Green
 
-          # Check if the release already exists
-          $null = gh release view $tag 2>&1
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "Release $tag exists. Uploading and overwriting installer asset..." -ForegroundColor Yellow
+          # Safely check existing releases without triggering PowerShell NativeCommandError on stderr
+          $existingReleases = gh release list 2>$null
+          $isExisting = $false
+          if ($existingReleases) {
+            foreach ($line in $existingReleases) {
+              if ($line -match "\b$([regex]::Escape($tag))\b") {
+                $isExisting = $true
+                break
+              }
+            }
+          }
+
+          if ($isExisting) {
+            Write-Host "Release $tag already exists. Uploading and overwriting installer asset..." -ForegroundColor Yellow
             gh release upload $tag "$setupFile#RhythmHubSetup.exe" --clobber
           } else {
             Write-Host "Creating new GitHub Release $tag..." -ForegroundColor Green
