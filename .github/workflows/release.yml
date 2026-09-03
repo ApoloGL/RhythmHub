@@ -46,6 +46,7 @@ jobs:
           Write-Host "Verified installer executable exists at $setupPath" -ForegroundColor Green
 
       - name: Create GitHub Release & Upload Setup Executable
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: dist/installer/RhythmHubSetup.exe
