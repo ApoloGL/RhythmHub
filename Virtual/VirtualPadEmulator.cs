@@ -20,16 +20,13 @@ public class VirtualPadEmulator : IVirtualController, IDisposable
             {
                 try
                 {
-                    File.AppendAllText(@"C:\Users\apolo\Desktop\rh_log.txt", "[VirtualPad] Connecting...\n");
                     _client = new ViGEmClient();
                     _controller = _client.CreateXbox360Controller();
                     _controller.AutoSubmitReport = false;
                     _controller.Connect();
-                    File.AppendAllText(@"C:\Users\apolo\Desktop\rh_log.txt", "[VirtualPad] Connected successfully\n");
                 }
                 catch (Exception ex)
                 {
-                    File.AppendAllText(@"C:\Users\apolo\Desktop\rh_log.txt", $"[VirtualPad] Connect Failed: {ex.Message}\n");
                     Console.WriteLine($"Failed to connect VirtualPad: {ex.Message}");
                     _controller = null;
                     _client?.Dispose();
@@ -83,13 +80,11 @@ public class VirtualPadEmulator : IVirtualController, IDisposable
         {
             if (_controller == null)
             {
-                File.AppendAllText(@"C:\Users\apolo\Desktop\rh_log.txt", "[VirtualPad] UpdateState ignored: _controller is null\n");
                 return;
             }
 
             try
             {
-                File.AppendAllText(@"C:\Users\apolo\Desktop\rh_log.txt", $"[VirtualPad] Submitting report: Green={state.Green}, StrumUp={state.StrumUp}\n");
                 // Frets (GHLive 6-fret mapping on Xbox 360 controller)
                 _controller.SetButtonState(Xbox360Button.A, state.Green);              // Black 1
                 _controller.SetButtonState(Xbox360Button.B, state.Red);                // Black 2
@@ -98,25 +93,23 @@ public class VirtualPadEmulator : IVirtualController, IDisposable
                 _controller.SetButtonState(Xbox360Button.LeftShoulder, state.Orange);  // White 2
                 _controller.SetButtonState(Xbox360Button.RightShoulder, state.White3); // White 3
 
-                // D-Pad and Strum buttons
-                _controller.SetButtonState(Xbox360Button.Up, state.StrumUp);
-                _controller.SetButtonState(Xbox360Button.Down, state.StrumDown);
+                // D-Pad and Strum buttons (Combine Strum and D-Pad for full compatibility)
+                _controller.SetButtonState(Xbox360Button.Up, state.StrumUp || state.DpadUp);
+                _controller.SetButtonState(Xbox360Button.Down, state.StrumDown || state.DpadDown);
                 _controller.SetButtonState(Xbox360Button.Left, state.DpadLeft);
                 _controller.SetButtonState(Xbox360Button.Right, state.DpadRight);
 
-                // Strum on Left Stick Y (Clone Hero / YARG default navigation & strum axis)
-                short strum = state.StrumUp ? short.MaxValue
-                    : state.StrumDown ? short.MinValue
-                    : (short)0;
-                _controller.SetAxisValue(Xbox360Axis.LeftThumbY, strum);
+                // Strumbar on Left Stick Y axis (Essential for Clone Hero & GHL simultaneous fret + strum gameplay)
+                short strumValue = state.StrumUp ? short.MaxValue : (state.StrumDown ? short.MinValue : (short)0);
+                _controller.SetAxisValue(Xbox360Axis.LeftThumbY, strumValue);
 
                 // Menu buttons
                 _controller.SetButtonState(Xbox360Button.Start, state.Start);
                 _controller.SetButtonState(Xbox360Button.Back, state.Select);
                 _controller.SetButtonState(Xbox360Button.LeftThumb, state.HeroPower);
 
-                // Whammy on Right Stick Y (Scale 0.0-1.0 to -32768 to 32767)
-                short whammyValue = (short)((state.Whammy * 65535f) - 32768);
+                // Whammy on Right Stick Y (Scale -1.0 to 1.0 to -32767 to 32767)
+                short whammyValue = (short)Math.Clamp(state.Whammy * 32767f, -32768f, 32767f);
                 _controller.SetAxisValue(Xbox360Axis.RightThumbY, whammyValue);
 
                 // Tilt on Right Stick X (Scale 0.0-1.0 to -32768 to 32767)

@@ -15,6 +15,9 @@ public partial class DeviceViewModel : ObservableObject
         ? "Running default Microsoft Xbox driver (LEDs active). Plays via GameInput/RB4IM. Switch to WinUSB to use RhythmHub's built-in mapper."
         : "Please press the Sync button on your guitar!";
 
+    public string ProtocolName => Provider is Providers.XboxOneGhlProvider ? "Xbox One WinUSB" : "Xbox One Native HID";
+    public string IconGlyph => "\xE990"; // Segoe Fluent Icons Gamepad
+
     public Microsoft.UI.Xaml.Visibility SyncInstructionVisibility => 
         (IsWaitingForSync || Provider is Providers.XboxOneDefaultDriverProvider) 
             ? Microsoft.UI.Xaml.Visibility.Visible 
@@ -31,9 +34,17 @@ public partial class DeviceViewModel : ObservableObject
 
     public Providers.IDeviceProvider Provider { get; }
 
-    public DeviceViewModel(Providers.IDeviceProvider provider)
+    public CommunityToolkit.Mvvm.Input.IAsyncRelayCommand<DeviceViewModel> RevertDriverCommand { get; }
+    public CommunityToolkit.Mvvm.Input.IAsyncRelayCommand<DeviceViewModel> SwitchToWinUsbCommand { get; }
+
+    public DeviceViewModel(
+        Providers.IDeviceProvider provider, 
+        CommunityToolkit.Mvvm.Input.IAsyncRelayCommand<DeviceViewModel> revertCmd, 
+        CommunityToolkit.Mvvm.Input.IAsyncRelayCommand<DeviceViewModel> switchCmd)
     {
         Provider = provider;
+        RevertDriverCommand = revertCmd;
+        SwitchToWinUsbCommand = switchCmd;
         DeviceName = provider.DeviceName;
         UpdateStatus(provider.IsSynced);
     }

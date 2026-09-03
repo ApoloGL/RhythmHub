@@ -8,8 +8,6 @@ using System.Diagnostics;
 using System.Security.Principal;
 using System.Management;
 using HidSharp;
-using LibUsbDotNet;
-using LibUsbDotNet.Main;
 using Nefarius.Utilities.DeviceManagement.PnP;
 using Nefarius.Utilities.DeviceManagement.Extensions;
 using Nefarius.Drivers.WinUSB;
@@ -36,6 +34,16 @@ public class DeviceManager : IDisposable
     public DeviceManager()
     {
         SetupWmiHotplugWatcher();
+        // Initial sweep to find already connected dongles
+        ScanForDevices();
+    }
+
+    public IEnumerable<IDeviceProvider> GetActiveProviders()
+    {
+        lock (_lock)
+        {
+            return _activeProviders.ToList();
+        }
     }
 
     public event Action? OnHotplugRescanRequired;
@@ -43,22 +51,29 @@ public class DeviceManager : IDisposable
 
     private void SetupWmiHotplugWatcher()
     {
-        try
+        Task.Run(() =>
         {
-            // Listen to any USB plug event
-            _usbInsertWatcher = new ManagementEventWatcher(new WqlEventQuery("SELECT * FROM __InstanceCreationEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_PnPEntity' AND TargetInstance.PNPDeviceID LIKE 'USB%'"));
-            _usbInsertWatcher.EventArrived += UsbDeviceInserted;
-            _usbInsertWatcher.Start();
+            try
+            {
+                // Specifically filter for GHLive dongle hardware IDs (Xbox One 1430:079B and PS3/WiiU 12BA:074B)
+                // This avoids waking up on every unrelated USB event (mice, keyboards, hubs)
+                _usbInsertWatcher = new ManagementEventWatcher(new WqlEventQuery(
+                    "SELECT * FROM __InstanceCreationEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_PnPEntity' AND " +
+                    "(TargetInstance.PNPDeviceID LIKE '%VID_1430&PID_079B%' OR TargetInstance.PNPDeviceID LIKE '%VID_12BA&PID_074B%')"));
+                _usbInsertWatcher.EventArrived += UsbDeviceInserted;
+                _usbInsertWatcher.Start();
 
-            // Listen to any USB unplug event
-            _usbRemoveWatcher = new ManagementEventWatcher(new WqlEventQuery("SELECT * FROM __InstanceDeletionEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_PnPEntity' AND TargetInstance.PNPDeviceID LIKE 'USB%'"));
-            _usbRemoveWatcher.EventArrived += UsbDeviceRemoved;
-            _usbRemoveWatcher.Start();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("WMI Watcher failed: " + ex.Message);
-        }
+                _usbRemoveWatcher = new ManagementEventWatcher(new WqlEventQuery(
+                    "SELECT * FROM __InstanceDeletionEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_PnPEntity' AND " +
+                    "(TargetInstance.PNPDeviceID LIKE '%VID_1430&PID_079B%' OR TargetInstance.PNPDeviceID LIKE '%VID_12BA&PID_074B%')"));
+                _usbRemoveWatcher.EventArrived += UsbDeviceRemoved;
+                _usbRemoveWatcher.Start();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("WMI Watcher failed: " + ex.Message);
+            }
+        });
     }
 
     private void UsbDeviceInserted(object sender, EventArrivedEventArgs e)
@@ -78,10 +93,6 @@ public class DeviceManager : IDisposable
                 
                 // Tell the UI to trigger a debounced rescan
                 OnHotplugRescanRequired?.Invoke();
-            }
-            else
-            {
-                OnHotplugEvent?.Invoke("USB Device Connected", $"{name} connected, but not recognized as a dongle.", Microsoft.UI.Xaml.Controls.InfoBarSeverity.Informational);
             }
         } 
         catch { }
@@ -148,87 +159,113 @@ public class DeviceManager : IDisposable
         var logBuilder = new System.Text.StringBuilder();
         logBuilder.AppendLine("--- USB DIAGNOSTIC SCAN ---");
 
-        // 1. Sweep using Nefarius PnP Device Management
-        logBuilder.AppendLine("[Nefarius PnP Enumeration]");
+        var foundPnpInstanceIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var foundHidDevicePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // 1. Sweep Xbox One Dongles (1430:079B) via WMI PnP
+        logBuilder.AppendLine("[WMI PnP Enumeration]");
         try
         {
-            var pnpDevices = USBDevice.GetDevices(DeviceInterfaceIds.UsbDevice);
-            foreach (var usbDevice in pnpDevices)
+            var query = new System.Management.WqlObjectQuery("SELECT DeviceID, PNPDeviceID FROM Win32_PnPEntity WHERE PNPDeviceID LIKE 'USB\\\\VID_1430&PID_079B%'");
+            using (var searcher = new System.Management.ManagementObjectSearcher(query))
             {
-                string devPath = usbDevice.DevicePath;
-                logBuilder.AppendLine($"PnP Device: {devPath}");
-                
+                // Pre-fetch WinUSB device interface paths once
+                List<USBDeviceInfo> pnpDevices = new();
                 try
                 {
-                    var pnpDevice = PnPDevice.GetDeviceByInterfaceId(devPath);
-                    if (pnpDevice is null) continue;
-                    var hwIds = pnpDevice.GetProperty<string[]>(DevicePropertyKey.Device_HardwareIds);
-                    
-                    if (hwIds != null && hwIds.Any(id => id.Contains("VID_1430&PID_079B", StringComparison.OrdinalIgnoreCase)))
+                    pnpDevices.AddRange(USBDevice.GetDevices(DeviceInterfaceIds.UsbDevice));
+                    pnpDevices.AddRange(USBDevice.GetDevices(Guid.Parse("d5ff2009-46be-4b95-bdc7-e322cd81f57d")));
+                }
+                catch { }
+
+                foreach (var mbo in searcher.Get())
+                {
+                    string pnpId = mbo["PNPDeviceID"]?.ToString() ?? "";
+                    string instanceId = mbo["DeviceID"]?.ToString() ?? "";
+                    if (string.IsNullOrEmpty(instanceId)) continue;
+
+                    foundPnpInstanceIds.Add(instanceId);
+                    logBuilder.AppendLine($"Found WMI Device: {pnpId}");
+
+                    try
                     {
-                        var classGuid = pnpDevice.GetProperty<Guid>(DevicePropertyKey.Device_ClassGuid);
-                        var winUsbGuid = Guid.Parse("88BAE032-5A81-49F0-BC3D-A4FF138216D6");
-
-                        if (classGuid != winUsbGuid)
+                        // Match with WinUSB interfaces
+                        string winUsbDevPath = "";
+                        foreach (var p in pnpDevices)
                         {
-                            logBuilder.AppendLine($"Found Xbox One Dongle (1430:079B) using default Windows driver.");
-                            lock (_lock)
+                            string normPath = p.DevicePath.Replace('#', '\\');
+                            if (normPath.Contains(instanceId, StringComparison.OrdinalIgnoreCase))
                             {
-                                var existing = _activeProviders.FirstOrDefault(p => string.Equals(p.DevicePath, devPath, StringComparison.OrdinalIgnoreCase));
-                                if (existing is XboxOneGhlProvider)
+                                winUsbDevPath = p.DevicePath;
+                                break;
+                            }
+                            try
+                            {
+                                var pnp = PnPDevice.GetDeviceByInterfaceId(p.DevicePath);
+                                if (pnp is not null && string.Equals(pnp.InstanceId, instanceId, StringComparison.OrdinalIgnoreCase))
                                 {
-                                    // It transitioned from WinUSB -> Default Driver
-                                    StopAndRemoveProvider(existing);
-                                    existing = null;
-                                }
-
-                                if (existing == null)
-                                {
-                                    var provider = new XboxOneDefaultDriverProvider(devPath, pnpDevice.InstanceId);
-                                    _activeProviders.Add(provider);
-                                    OnDeviceAdded?.Invoke(provider);
-                                    StartProvider(provider);
-                                    devicesFound++;
+                                    winUsbDevPath = p.DevicePath;
+                                    break;
                                 }
                             }
+                            catch { }
                         }
-                        else
+
+                        bool hasWinUsb = !string.IsNullOrEmpty(winUsbDevPath);
+
+                        lock (_lock)
                         {
-                            logBuilder.AppendLine($"Found Xbox One Dongle (1430:079B) using WinUSB.");
-                            lock (_lock)
+                            IDeviceProvider? existing = _activeProviders.FirstOrDefault(p => string.Equals(p.InstanceId, instanceId, StringComparison.OrdinalIgnoreCase));
+
+                            if (!hasWinUsb)
                             {
-                                var existing = _activeProviders.FirstOrDefault(p => string.Equals(p.DevicePath, devPath, StringComparison.OrdinalIgnoreCase));
-                                if (existing is XboxOneDefaultDriverProvider)
+                                logBuilder.AppendLine($"Found Xbox One Dongle (1430:079B) using default Windows driver.");
+                                if (existing is XboxOneGhlProvider)
                                 {
-                                    // It transitioned from Default Driver -> WinUSB
                                     StopAndRemoveProvider(existing);
                                     existing = null;
                                 }
 
                                 if (existing == null)
                                 {
-                                    var provider = new XboxOneGhlProvider(devPath, "GHLive Guitar (Xbox One WinUSB)", pnpDevice.InstanceId);
+                                    var provider = new XboxOneDefaultDriverProvider(instanceId, instanceId);
                                     _activeProviders.Add(provider);
                                     OnDeviceAdded?.Invoke(provider);
                                     StartProvider(provider);
-                                    devicesFound++;
+                                }
+                            }
+                            else
+                            {
+                                logBuilder.AppendLine($"Found Xbox One Dongle (1430:079B) using WinUSB.");
+                                if (existing is XboxOneDefaultDriverProvider)
+                                {
+                                    StopAndRemoveProvider(existing);
+                                    existing = null;
+                                }
+
+                                if (existing == null)
+                                {
+                                    var provider = new XboxOneGhlProvider(winUsbDevPath, "GHLive Guitar (Xbox One WinUSB)", instanceId);
+                                    _activeProviders.Add(provider);
+                                    OnDeviceAdded?.Invoke(provider);
+                                    StartProvider(provider);
                                 }
                             }
                         }
                     }
-                }
-                catch (Exception innerEx)
-                {
-                    logBuilder.AppendLine($"Error inspecting PnP device: {innerEx.Message}");
+                    catch (Exception innerEx)
+                    {
+                        logBuilder.AppendLine($"Error inspecting PnP device: {innerEx.Message}");
+                    }
                 }
             }
         }
         catch (Exception ex)
         {
-            logBuilder.AppendLine($"PnP Enumeration failed: {ex.Message}");
+            logBuilder.AppendLine($"WMI Enumeration failed: {ex.Message}");
         }
 
-        // 2. Sweep using HidSharp
+        // 2. Sweep PS3/Wii U Dongles (12BA:074B) using HidSharp
         logBuilder.AppendLine("\n[HidSharp Native HID Enumeration]");
         try
         {
@@ -236,11 +273,11 @@ public class DeviceManager : IDisposable
             {
                 try
                 {
-                    string devInfo = $"VID: 0x{hidDevice.VendorID:X4}, PID: 0x{hidDevice.ProductID:X4} | {hidDevice.DevicePath}";
-                    logBuilder.AppendLine(devInfo);
-
                     if (hidDevice.VendorID == 0x12BA && hidDevice.ProductID == 0x074B)
                     {
+                        foundHidDevicePaths.Add(hidDevice.DevicePath);
+                        logBuilder.AppendLine($"VID: 0x12BA, PID: 0x074B | {hidDevice.DevicePath}");
+
                         lock (_lock)
                         {
                             bool alreadyAdded = _activeProviders.Any(p => string.Equals(p.DevicePath, hidDevice.DevicePath, StringComparison.OrdinalIgnoreCase));
@@ -250,7 +287,6 @@ public class DeviceManager : IDisposable
                                 _activeProviders.Add(provider);
                                 OnDeviceAdded?.Invoke(provider);
                                 StartProvider(provider);
-                                devicesFound++;
                             }
                         }
                     }
@@ -265,9 +301,43 @@ public class DeviceManager : IDisposable
         {
             logBuilder.AppendLine($"HidSharp enumeration failed: {ex.Message}");
         }
-        
+
+        // 3. Reconcile removals: Stop only providers whose hardware was disconnected
+        var providersToRemove = new List<IDeviceProvider>();
+        lock (_lock)
+        {
+            foreach (var provider in _activeProviders)
+            {
+                if (provider is XboxOneGhlProvider or XboxOneDefaultDriverProvider)
+                {
+                    if (!string.IsNullOrEmpty(provider.InstanceId) && !foundPnpInstanceIds.Contains(provider.InstanceId))
+                    {
+                        providersToRemove.Add(provider);
+                    }
+                }
+                else if (provider is GHLiveHidProvider)
+                {
+                    if (!foundHidDevicePaths.Contains(provider.DevicePath))
+                    {
+                        providersToRemove.Add(provider);
+                    }
+                }
+            }
+        }
+
+        foreach (var p in providersToRemove)
+        {
+            logBuilder.AppendLine($"Removing disconnected device: {p.DeviceName} ({p.InstanceId ?? p.DevicePath})");
+            StopAndRemoveProvider(p);
+        }
+
+        lock (_lock)
+        {
+            devicesFound = _activeProviders.Count;
+        }
+
         logBuilder.AppendLine("---------------------------");
-        
+
         return (devicesFound, logBuilder.ToString());
     }
 

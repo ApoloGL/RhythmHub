@@ -12,6 +12,8 @@ public class InstrumentState
 
     public bool StrumUp { get; set; }
     public bool StrumDown { get; set; }
+    public bool DpadUp { get; set; }
+    public bool DpadDown { get; set; }
     public bool DpadLeft { get; set; }
     public bool DpadRight { get; set; }
     

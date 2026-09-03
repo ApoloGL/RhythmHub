@@ -5,7 +5,7 @@
     xmlns:viewmodels="using:RhythmHub.ViewModels"
     Title="RhythmHub">
 
-    <Grid Background="{StaticResource WindowBackgroundBrush}">
+    <Grid Background="{StaticResource WindowBackgroundBrush}" Loaded="RootGrid_Loaded">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -62,62 +62,81 @@
                 <TextBlock Text="Plug in a receiver or manually connect a custom instrument above." Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
             </StackPanel>
 
-            <!-- Master-Detail Layout -->
-            <Grid Visibility="{x:Bind ViewModel.HasDevices, Mode=OneWay}">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="300"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
+            <!-- Grid of Cards -->
+            <GridView Visibility="{x:Bind ViewModel.HasDevices, Mode=OneWay}"
+                      ItemsSource="{x:Bind ViewModel.ConnectedDevices}"
+                      SelectionMode="None"
+                      Padding="40"
+                      HorizontalAlignment="Stretch">
+                <GridView.ItemTemplate>
+                    <DataTemplate x:DataType="viewmodels:DeviceViewModel">
+                        <Border Background="{StaticResource CardBackgroundBrush}" 
+                                CornerRadius="8" 
+                                Padding="20" 
+                                Margin="10" 
+                                Width="320" 
+                                MinHeight="220"
+                                BorderThickness="1"
+                                BorderBrush="#2A2A35">
+                            <Border.Shadow>
+                                <ThemeShadow/>
+                            </Border.Shadow>
 
-                <!-- Sidebar (Master) -->
-                <Border Grid.Column="0" BorderThickness="0,0,1,0" BorderBrush="#2A2A35" Background="#111116">
-                    <ListView ItemsSource="{x:Bind ViewModel.ConnectedDevices}" 
-                              SelectedItem="{x:Bind ViewModel.SelectedDevice, Mode=TwoWay}"
-                              Margin="0,10,0,0"
-                              SelectionMode="Single">
-                        <ListView.ItemTemplate>
-                            <DataTemplate x:DataType="viewmodels:DeviceViewModel">
-                                <StackPanel Padding="10,5">
-                                    <TextBlock Text="{x:Bind DeviceName}" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}"/>
-                                    <TextBlock Text="{x:Bind ConnectionStatus, Mode=OneWay}" FontSize="12" Foreground="{x:Bind StatusColor, Mode=OneWay}"/>
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- Header: Icon + Title + Protocol -->
+                                <StackPanel Grid.Row="0" Spacing="5">
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <FontIcon Glyph="{x:Bind IconGlyph}" FontFamily="Segoe Fluent Icons" FontSize="24" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{x:Bind DeviceName}" FontSize="20" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                    <Border Background="#2D2D38" CornerRadius="4" Padding="6,2" HorizontalAlignment="Left" Margin="34,0,0,0">
+                                        <TextBlock Text="{x:Bind ProtocolName}" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                    </Border>
                                 </StackPanel>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
-                </Border>
 
-                <!-- Detail View -->
-                <Grid Grid.Column="1" Padding="40" Visibility="{x:Bind ViewModel.IsDeviceSelected, Mode=OneWay}" DataContext="{x:Bind ViewModel.SelectedDevice, Mode=OneWay}">
-                    <StackPanel Spacing="20">
-                        <!-- We just bind directly since DataContext is set, but x:Bind requires casting or specific paths. 
-                             Using standard Binding here for simplicity since DataContext changes -->
-                        <TextBlock Text="{Binding DeviceName}" FontSize="36" FontWeight="Black" Foreground="{StaticResource TextPrimaryBrush}"/>
-                        
-                        <Border Background="{StaticResource CardBackgroundBrush}" CornerRadius="8" Padding="20">
-                            <StackPanel Spacing="10">
-                                <TextBlock Text="DEVICE STATUS" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"/>
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <Ellipse Width="16" Height="16" Fill="{Binding StatusColor}"/>
-                                    <TextBlock Text="{Binding ConnectionStatus}" FontSize="16" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                                <!-- Status -->
+                                <StackPanel Grid.Row="1" Spacing="8" Margin="0,20,0,20">
+                                    <TextBlock Text="STATUS" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" CharacterSpacing="50"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Ellipse Width="12" Height="12" Fill="{x:Bind StatusColor, Mode=OneWay}"/>
+                                        <TextBlock Text="{x:Bind ConnectionStatus, Mode=OneWay}" FontSize="14" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{x:Bind SyncInstruction, Mode=OneWay}" 
+                                               Visibility="{x:Bind SyncInstructionVisibility, Mode=OneWay}" 
+                                               Foreground="{StaticResource AccentBrush}" 
+                                               FontSize="12" 
+                                               TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <TextBlock Text="{Binding SyncInstruction}" Visibility="{Binding SyncInstructionVisibility}" Foreground="{StaticResource AccentBrush}" Margin="0,10,0,0"/>
 
-                                <Button Content="Revert to Default Driver" 
-                                        Command="{x:Bind ViewModel.RevertXboxDriverCommand}" 
-                                        Visibility="{Binding RevertDriverVisibility}"
-                                        Background="#2D2D38" BorderBrush="#444455" Margin="0,10,0,0"
-                                        ToolTipService.ToolTip="Restore factory Microsoft Xbox driver (lights up dongle, native input)"/>
+                                <!-- Actions -->
+                                <StackPanel Grid.Row="2" Spacing="8">
+                                    <Button Content="Revert to Default Driver" 
+                                            Command="{x:Bind RevertDriverCommand}" 
+                                            CommandParameter="{x:Bind}"
+                                            Visibility="{x:Bind RevertDriverVisibility, Mode=OneWay}"
+                                            Background="#2D2D38" BorderBrush="#444455"
+                                            HorizontalAlignment="Stretch"
+                                            ToolTipService.ToolTip="Restore factory Microsoft Xbox driver"/>
 
-                                <Button Content="Switch to WinUSB Driver" 
-                                        Command="{x:Bind ViewModel.SwitchToWinUsbDriverCommand}" 
-                                        Visibility="{Binding SwitchToWinUsbVisibility}"
-                                        Background="#0078D4" Foreground="White" BorderThickness="0" Margin="0,10,0,0"
-                                        ToolTipService.ToolTip="Install WinUSB driver to use RhythmHub's built-in mapper"/>
-                            </StackPanel>
+                                    <Button Content="Switch to WinUSB Driver" 
+                                            Command="{x:Bind SwitchToWinUsbCommand}" 
+                                            CommandParameter="{x:Bind}"
+                                            Visibility="{x:Bind SwitchToWinUsbVisibility, Mode=OneWay}"
+                                            Background="#0078D4" Foreground="White" BorderThickness="0"
+                                            HorizontalAlignment="Stretch"
+                                            ToolTipService.ToolTip="Install WinUSB driver to use RhythmHub's built-in mapper"/>
+                                </StackPanel>
+                            </Grid>
                         </Border>
-                    </StackPanel>
-                </Grid>
-            </Grid>
+                    </DataTemplate>
+                </GridView.ItemTemplate>
+            </GridView>
             
             <!-- USB Hotplug Notification Banner -->
             <InfoBar Grid.Row="1" 

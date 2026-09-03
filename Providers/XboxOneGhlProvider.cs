@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -130,8 +129,10 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
                             // Handle Arrival (0x02) - Guitar is connecting/syncing!
                             if (cmdId == 0x02)
                             {
-                                File.AppendAllText(@"C:\Users\apolo\Desktop\rh_log.txt", $"[Arrival] Client {clientId}\n");
-                                _connectedClients.Add(clientId);
+                                lock (_connectedClients)
+                                {
+                                    _connectedClients.Add(clientId);
+                                }
                                 Console.WriteLine($"Xbox One Dongle: Received Arrival from guitar client {clientId}! Completing sync handshake...");
                                 IsSynced = true;
 
@@ -160,15 +161,17 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
                                     IsSynced = connected;
                                     if (!connected)
                                     {
-                                        _connectedClients.Remove(clientId);
+                                        lock (_connectedClients)
+                                        {
+                                            _connectedClients.Remove(clientId);
+                                        }
                                     }
                                 }
                             }
-                            else if (cmdId == 0x20 || cmdId == 0x21)
+                            else if (cmdId == 0x21)
                             {
                                 IsSynced = true;
-                                File.AppendAllText(@"C:\Users\apolo\Desktop\rh_log.txt", $"[Input] Cmd: {cmdId:X2}, Len: {totalMsgLen}\n");
-                                var state = TranslatePacket(cmdId, readBuffer, offset, totalMsgLen);
+                                var state = TranslateGhlPacket(readBuffer, offset, totalMsgLen);
                                 try
                                 {
                                     onStateChanged(clientId, state);
@@ -177,6 +180,13 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
                                 {
                                     Console.WriteLine($"Error notifying state changed: {ex.Message}");
                                 }
+                            }
+                            else if (cmdId == 0x20)
+                            {
+                                // 0x20 is the standard Xbox One GIP navigation packet (D-pad & standard axes).
+                                // It lacks White 2 and White 3 frets. We intentionally do NOT emit 0x20 as
+                                // instrument state to prevent it from clobbering active 6-fret strumming state.
+                                IsSynced = true;
                             }
 
                             offset += totalMsgLen;
@@ -272,10 +282,16 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
                 {
                     if (_mainInterface?.OutPipe != null)
                     {
-                        var clients = _connectedClients.ToList();
+                        List<byte> clients;
+                        lock (_connectedClients)
+                        {
+                            clients = _connectedClients.ToList();
+                        }
+
                         if (clients.Count == 0)
                         {
-                            // If no clients known, poke 1 and 2 just in case
+                            // If no clients known yet, poke 0, 1, and 2 just in case
+                            clients.Add(0);
                             clients.Add(1);
                             clients.Add(2);
                         }
@@ -293,8 +309,8 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
                     break;
                 }
 
-                // Poke every 10 seconds to keep it in 6-fret mode
-                await Task.Delay(10000, token);
+                // GHL Keep-Alive interval is strictly 8 seconds (GHL_GUITAR_POKE_INTERVAL)
+                await Task.Delay(8000, token);
             }
         }
         catch (OperationCanceledException)
@@ -358,86 +374,49 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
         return -1;
     }
 
-    private InstrumentState TranslatePacket(byte cmdId, byte[] data, int offset, int length)
+    private InstrumentState TranslateGhlPacket(byte[] data, int offset, int length)
     {
         var state = new InstrumentState();
         
         // Ensure we have at least 14 bytes of payload (length = 4 bytes header + 14 bytes payload = 18 bytes total)
         if (length < 18) return state;
 
-        if (cmdId == 0x21)
+        // Parse GHLive-specific 0x21 packets
+        ushort buttons = BitConverter.ToUInt16(data, offset + 4);
+        
+        // White1 = 0x0001, Black1 = 0x0002, Black2 = 0x0004, Black3 = 0x0008, White2 = 0x0010, White3 = 0x0020
+        state.Blue = (buttons & 0x0001) != 0;    // White 1
+        state.Green = (buttons & 0x0002) != 0;   // Black 1
+        state.Red = (buttons & 0x0004) != 0;     // Black 2
+        state.Yellow = (buttons & 0x0008) != 0;  // Black 3
+        state.Orange = (buttons & 0x0010) != 0;  // White 2
+        state.White3 = (buttons & 0x0020) != 0;  // White 3
+
+        state.HeroPower = (buttons & 0x0100) != 0; // Select
+        state.Start = (buttons & 0x0200) != 0;     // Start
+        state.Select = (buttons & 0x0400) != 0;    // GHTV button -> Select
+
+        byte dpad = data[offset + 6]; // offset 2 in payload
+        state.DpadUp = dpad == 0 || dpad == 1 || dpad == 7;
+        state.DpadDown = dpad == 3 || dpad == 4 || dpad == 5;
+        state.DpadLeft = dpad == 5 || dpad == 6 || dpad == 7;
+        state.DpadRight = dpad == 1 || dpad == 2 || dpad == 3;
+
+        byte strum = data[offset + 8]; // offset 4 in payload
+        // Strum bar rests at 128 (0x80), 0 is Strum Up, 255 is Strum Down.
+        // Deadzone of 20 prevents mechanical jitter
+        state.StrumUp = strum < (128 - 20);
+        state.StrumDown = strum > (128 + 20);
+
+        byte whammy = data[offset + 10]; // offset 6 in payload
+        // Whammy rests at 128, goes to 255. Add a small deadzone to prevent resting jitter (blips).
+        float whammyVal = (whammy - 128f) / 127f;
+        state.Whammy = whammyVal < 0.1f ? 0f : whammyVal;
+
+        if (length >= 24)
         {
-            // Parse GHLive-specific 0x21 packets
-            ushort buttons = BitConverter.ToUInt16(data, offset + 4);
-            
-            // White1 = 0x0001, Black1 = 0x0002, Black2 = 0x0004, Black3 = 0x0008, White2 = 0x0010, White3 = 0x0020
-            state.Blue = (buttons & 0x0001) != 0;    // White 1
-            state.Green = (buttons & 0x0002) != 0;   // Black 1
-            state.Red = (buttons & 0x0004) != 0;     // Black 2
-            state.Yellow = (buttons & 0x0008) != 0;  // Black 3
-            state.Orange = (buttons & 0x0010) != 0;  // White 2
-            state.White3 = (buttons & 0x0020) != 0;  // White 3
-
-            state.HeroPower = (buttons & 0x0100) != 0; // Select
-            state.Start = (buttons & 0x0200) != 0; // Start
-            state.Select = (buttons & 0x0400) != 0; // GHTV button -> Select
-
-            byte dpad = data[offset + 6]; // offset 2 in payload
-            bool dpadUp = dpad == 0 || dpad == 1 || dpad == 7;
-            bool dpadDown = dpad == 3 || dpad == 4 || dpad == 5;
-            state.DpadLeft = dpad == 5 || dpad == 6 || dpad == 7;
-            state.DpadRight = dpad == 1 || dpad == 2 || dpad == 3;
-
-            byte strum = data[offset + 8]; // offset 4 in payload
-            state.StrumUp = strum < 0x80 || dpadUp;
-            state.StrumDown = strum > 0x80 || dpadDown;
-
-            byte whammy = data[offset + 10]; // offset 6 in payload
-            state.Whammy = (whammy - 128f) / 127f; // basic scaling
-
-            var payloadBytes = new byte[length - 4];
-            Array.Copy(data, offset + 4, payloadBytes, 0, length - 4);
-            string hexPayload = BitConverter.ToString(payloadBytes);
-            File.AppendAllText(@"C:\Users\apolo\Desktop\rh_log.txt", $"[Raw Input] Cmd21 Payload: {hexPayload}\n");
-
-            if (length >= 24)
-            {
-                byte tilt = data[offset + 23]; // offset 19 in payload
-                state.Tilt = tilt / 255f;
-            }
-        }
-        else // cmdId == 0x20
-        {
-            // Standard Xbox One GIP 0x20 packets
-            ushort buttons = BitConverter.ToUInt16(data, offset + 4);
-
-            state.Green = (buttons & 0x0010) != 0;  // A
-            state.Red = (buttons & 0x0020) != 0;    // B
-            state.Yellow = (buttons & 0x0080) != 0; // Y
-            state.Blue = (buttons & 0x0040) != 0;   // X
-            state.Orange = (buttons & 0x1000) != 0; // LB
-            state.White3 = (buttons & 0x2000) != 0; // RB
-
-            // Menu buttons
-            state.Select = (buttons & 0x0008) != 0; // View
-            state.Start = (buttons & 0x0004) != 0;  // Menu
-            state.HeroPower = (buttons & 0x0008) != 0 || (buttons & 0x0001) != 0; // View or Sync
-
-            // D-Pad and Strum (Guitars usually map Strum to D-Pad Up/Down)
-            state.DpadLeft = (buttons & 0x0400) != 0;
-            state.DpadRight = (buttons & 0x0800) != 0;
-            state.StrumUp = (buttons & 0x0100) != 0;
-            state.StrumDown = (buttons & 0x0200) != 0;
-
-            short leftStickY = BitConverter.ToInt16(data, offset + 12);
-            short rightStickX = BitConverter.ToInt16(data, offset + 14);
-            short rightStickY = BitConverter.ToInt16(data, offset + 16);
-
-            if (leftStickY > 16384) state.StrumUp = true;
-            if (leftStickY < -16384) state.StrumDown = true;
-
-            state.Whammy = (rightStickX + 32768) / 65535f;
-            state.Tilt = (rightStickY + 32768) / 65535f;
+            byte tilt = data[offset + 23]; // offset 19 in payload
+            state.Tilt = tilt / 255f;
         }
 
         return state;

@@ -23,12 +23,19 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.4.230913002" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.756" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
-    <PackageReference Include="LibUsbDotNet" Version="2.2.29" />
     <PackageReference Include="Nefarius.Drivers.WinUSB" Version="5.4.0" />
     <PackageReference Include="Nefarius.Utilities.DeviceManagement" Version="6.0.0" />
-    <PackageReference Include="SharpPcap" Version="6.3.0" />
     <PackageReference Include="Nefarius.ViGEm.Client" Version="1.21.222" />
     <PackageReference Include="System.Management" Version="7.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="ViGEmBus_1.22.0_x64_x86_arm64.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="winusb.inf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

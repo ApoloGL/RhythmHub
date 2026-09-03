@@ -32,13 +32,22 @@ public partial class MainViewModel : ObservableObject
     {
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         _deviceManager = new DeviceManager();
+        
+        // Add devices that were found during the constructor's initial sweep
+        foreach (var provider in _deviceManager.GetActiveProviders())
+        {
+            var vm = new DeviceViewModel(provider, RevertXboxDriverCommand, SwitchToWinUsbDriverCommand);
+            ConnectedDevices.Add(vm);
+            if (SelectedDevice == null)
+                SelectedDevice = vm;
+        }
+        IsEmptyState = ConnectedDevices.Count == 0;
+
         _deviceManager.OnDeviceAdded += DeviceManager_OnDeviceAdded;
         _deviceManager.OnDeviceRemoved += DeviceManager_OnDeviceRemoved;
         _deviceManager.OnDevicesCleared += DeviceManager_OnDevicesCleared;
         _deviceManager.OnHotplugEvent += DeviceManager_OnHotplugEvent;
         _deviceManager.OnHotplugRescanRequired += DeviceManager_OnHotplugRescanRequired;
-        
-        _ = PerformScan();
         
         // Background loop to poll IsSynced status for UI
         Task.Run(async () =>
@@ -185,10 +194,6 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
-            _deviceManager.ClearDevices();
-            // Short buffer for Windows to release any pending file/device handles
-            await Task.Delay(200);
-
             var result = await Task.Run(() => _deviceManager.ScanForDevices());
             DiagnosticLog = result.log;
         }
@@ -200,6 +205,11 @@ public partial class MainViewModel : ObservableObject
         {
             _isScanning = false;
         }
+    }
+
+    public async Task InitializeAsync()
+    {
+        await PerformScan();
     }
 
     [ObservableProperty]
@@ -243,17 +253,16 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task RevertXboxDriver()
+    private async Task RevertXboxDriver(DeviceViewModel device)
     {
-        if (SelectedDevice?.Provider == null) return;
+        if (device?.Provider == null) return;
 
-        var targetDevice = SelectedDevice;
         DeviceManager_OnHotplugEvent("Driver Reversion", "Reverting Xbox One dongle to default Windows driver... Please wait.", Microsoft.UI.Xaml.Controls.InfoBarSeverity.Informational);
 
         _isSwappingDriverMain = true;
         try
         {
-            var (success, resultMessage) = await _deviceManager.RevertSpecificDeviceAsync(targetDevice.Provider);
+            var (success, resultMessage) = await _deviceManager.RevertSpecificDeviceAsync(device.Provider);
 
             if (success)
             {
@@ -277,17 +286,16 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task SwitchToWinUsbDriver()
+    private async Task SwitchToWinUsbDriver(DeviceViewModel device)
     {
-        if (SelectedDevice?.Provider == null) return;
+        if (device?.Provider == null) return;
 
-        var targetDevice = SelectedDevice;
         DeviceManager_OnHotplugEvent("Driver Installation", "Switching Xbox One dongle to WinUSB driver... Please wait.", Microsoft.UI.Xaml.Controls.InfoBarSeverity.Informational);
 
         _isSwappingDriverMain = true;
         try
         {
-            var (success, resultMessage) = await _deviceManager.SwitchSpecificDeviceToWinUsbAsync(targetDevice.Provider);
+            var (success, resultMessage) = await _deviceManager.SwitchSpecificDeviceToWinUsbAsync(device.Provider);
 
             if (success)
             {
@@ -314,6 +322,10 @@ public partial class MainViewModel : ObservableObject
     {
         _dispatcherQueue.TryEnqueue(() =>
         {
+            // If this exact provider instance is already in ConnectedDevices, do not duplicate
+            if (ConnectedDevices.Any(vm => vm.Provider == provider))
+                return;
+
             // Remove any obsolete VM with the same device path or instance ID
             var existingVm = ConnectedDevices.FirstOrDefault(vm => 
                 string.Equals(vm.Provider.DevicePath, provider.DevicePath, StringComparison.OrdinalIgnoreCase) ||
@@ -324,7 +336,7 @@ public partial class MainViewModel : ObservableObject
                 ConnectedDevices.Remove(existingVm);
             }
 
-            var vm = new DeviceViewModel(provider);
+            var vm = new DeviceViewModel(provider, RevertXboxDriverCommand, SwitchToWinUsbDriverCommand);
             ConnectedDevices.Add(vm);
             IsEmptyState = false;
             

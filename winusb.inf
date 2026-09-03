@@ -1,0 +1,39 @@
+; RhythmHub WinUSB Driver Installation file for Xbox One GHL Dongle
+
+[Version]
+Signature = "$Windows NT$"
+Class = USBDevice
+ClassGUID = {88BAE032-5A81-49f0-BC3D-A4FF138216D6}
+Provider = %ManufacturerName%
+DriverVer = 01/01/2024, 1.0.0.0
+
+[Manufacturer]
+%ManufacturerName% = Standard,NTamd64,NTx86,NTarm64
+
+[Standard.NTamd64]
+%DeviceName% = USB_Install, USB\VID_1430&PID_079B
+
+[Standard.NTx86]
+%DeviceName% = USB_Install, USB\VID_1430&PID_079B
+
+[Standard.NTarm64]
+%DeviceName% = USB_Install, USB\VID_1430&PID_079B
+
+[USB_Install]
+Include = winusb.inf
+Needs = WINUSB.NT
+
+[USB_Install.Services]
+Include = winusb.inf
+Needs = WINUSB.NT.Services
+
+[USB_Install.HW]
+AddReg = Dev_AddReg
+
+[Dev_AddReg]
+; This GUID is how RhythmHub locates the device once WinUSB takes over
+HKR,,DeviceInterfaceGUIDs,0x10000,"{d5ff2009-46be-4b95-bdc7-e322cd81f57d}"
+
+[Strings]
+ManufacturerName = "RhythmHub"
+DeviceName = "Xbox One GHL Dongle (WinUSB)"

@@ -14,13 +14,13 @@ public partial class App : Application
 
         UnhandledException += (sender, e) =>
         {
-            Console.WriteLine($"[WinUI UnhandledException] {e.Message}\n{e.Exception}");
-            e.Handled = true;
+            System.IO.File.WriteAllText("crash.txt", $"[WinUI] {e.Message}\n{e.Exception}");
+            e.Handled = false; // Let it crash properly
         };
 
         AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
         {
-            Console.WriteLine($"[AppDomain UnhandledException] {e.ExceptionObject}");
+            System.IO.File.WriteAllText("crash2.txt", $"[AppDomain] {e.ExceptionObject}");
         };
 
         TaskScheduler.UnobservedTaskException += (sender, e) =>
