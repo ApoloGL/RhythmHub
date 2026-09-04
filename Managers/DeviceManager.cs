@@ -440,19 +440,40 @@ public class DeviceManager : IDisposable
         OnDeviceRemoved?.Invoke(provider);
     }
 
+    public static bool IsValidInstanceId(string? instanceId)
+    {
+        if (string.IsNullOrWhiteSpace(instanceId)) return false;
+        foreach (char c in instanceId)
+        {
+            if (!char.IsLetterOrDigit(c) && c != '\\' && c != '&' && c != '_' && c != '-' && c != '{' && c != '}' && c != ':' && c != '.')
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public static bool ExecuteRevertPnp(string instanceId)
     {
+        if (!IsValidInstanceId(instanceId))
+        {
+            Console.WriteLine($"Invalid or untrusted PnP instance ID rejected: {instanceId}");
+            return false;
+        }
+
         try
         {
             Console.WriteLine($"Reverting device {instanceId} to default Windows driver via pnputil...");
             var psiRemove = new ProcessStartInfo
             {
                 FileName = "pnputil.exe",
-                Arguments = $"/remove-device \"{instanceId}\"",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true
             };
+            psiRemove.ArgumentList.Add("/remove-device");
+            psiRemove.ArgumentList.Add(instanceId);
+
             using (var procRemove = Process.Start(psiRemove))
             {
                 procRemove?.WaitForExit(10000);
@@ -463,11 +484,12 @@ public class DeviceManager : IDisposable
             var psiScan = new ProcessStartInfo
             {
                 FileName = "pnputil.exe",
-                Arguments = "/scan-devices",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true
             };
+            psiScan.ArgumentList.Add("/scan-devices");
+
             using (var procScan = Process.Start(psiScan))
             {
                 procScan?.WaitForExit(10000);
@@ -500,6 +522,12 @@ public class DeviceManager : IDisposable
 
     public static bool ExecuteSwitchToWinUsbPnp(string instanceId)
     {
+        if (!IsValidInstanceId(instanceId))
+        {
+            Console.WriteLine($"Invalid or untrusted PnP instance ID rejected: {instanceId}");
+            return false;
+        }
+
         try
         {
             var pnpDevice = PnPDevice.GetDeviceByInstanceId(instanceId).ToUsbPnPDevice();
