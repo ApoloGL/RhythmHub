@@ -57,7 +57,13 @@ public static class Program
         catch (Exception ex)
         {
             Console.WriteLine($"[Startup Fatal Error] {ex}");
-            System.IO.File.WriteAllText("fatal_startup_error.txt", ex.ToString());
+            try
+            {
+                string logDir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RhythmHub", "Logs");
+                System.IO.Directory.CreateDirectory(logDir);
+                System.IO.File.WriteAllText(System.IO.Path.Combine(logDir, "fatal_startup_error.txt"), ex.ToString());
+            }
+            catch { }
         }
     }
 }

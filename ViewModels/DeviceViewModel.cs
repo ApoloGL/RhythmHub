@@ -47,31 +47,48 @@ public partial class DeviceViewModel : ObservableObject
         UpdateStatus(provider.IsSynced);
     }
 
+    private static readonly SolidColorBrush DeepSkyBlueBrush = new(Colors.DeepSkyBlue);
+    private static readonly SolidColorBrush LimeGreenBrush = new(Colors.LimeGreen);
+    private static readonly SolidColorBrush RedBrush = new(Colors.Red);
+    private static readonly SolidColorBrush YellowBrush = new(Colors.Yellow);
+
+    private bool? _lastSyncedState;
+    private string? _lastErrorMessage;
+
     public void UpdateStatus(bool isSynced)
     {
+        string currentError = Provider.ErrorMessage ?? "";
+        if (_lastSyncedState == isSynced && _lastErrorMessage == currentError)
+        {
+            return;
+        }
+
+        _lastSyncedState = isSynced;
+        _lastErrorMessage = currentError;
+
         if (Provider is Providers.XboxOneDefaultDriverProvider)
         {
             ConnectionStatus = "Default Windows Driver (Ready)";
-            StatusColor = new SolidColorBrush(Colors.DeepSkyBlue);
+            StatusColor = DeepSkyBlueBrush;
             IsWaitingForSync = false;
         }
         else if (isSynced)
         {
             ConnectionStatus = "Synced & Active";
-            StatusColor = new SolidColorBrush(Colors.LimeGreen);
+            StatusColor = LimeGreenBrush;
             IsWaitingForSync = false;
         }
         else
         {
-            if (!string.IsNullOrEmpty(Provider.ErrorMessage))
+            if (!string.IsNullOrEmpty(currentError))
             {
-                ConnectionStatus = $"Error: {Provider.ErrorMessage}";
-                StatusColor = new SolidColorBrush(Colors.Red);
+                ConnectionStatus = $"Error: {currentError}";
+                StatusColor = RedBrush;
             }
             else
             {
                 ConnectionStatus = "Dongle Detected";
-                StatusColor = new SolidColorBrush(Colors.Yellow);
+                StatusColor = YellowBrush;
             }
             IsWaitingForSync = true;
         }

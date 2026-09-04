@@ -60,10 +60,10 @@ public partial class MainViewModel : ObservableObject
                 {
                     try
                     {
-                        var list = ConnectedDevices.ToList();
-                        foreach (var device in list)
+                        for (int i = 0; i < ConnectedDevices.Count; i++)
                         {
-                            if (device.Provider != null)
+                            var device = ConnectedDevices[i];
+                            if (device?.Provider != null)
                             {
                                 device.UpdateStatus(device.Provider.IsSynced);
                             }

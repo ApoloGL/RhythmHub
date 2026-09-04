@@ -20,6 +20,8 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
     private USBDevice? _winUsbDevice;
     private USBInterface? _mainInterface;
     private readonly HashSet<byte> _connectedClients = new();
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(byte cmdId, byte flagsClient, byte seq, int totalMsgLen)> _ackQueue = new();
+    private readonly SemaphoreSlim _ackSignal = new(0);
 
     // Reusable buffers for zero-allocation hot loop
     private readonly InstrumentState[] _clientStates = new InstrumentState[8];
@@ -48,7 +50,9 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
     {
         Thread? readThread = null;
         Task? pokeTask = null;
+        Task? ackTask = null;
         bool keepReading = true;
+        var readThreadTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         try
         {
@@ -98,24 +102,28 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
                     _mainInterface?.InPipe?.Abort();
                 }
                 catch { }
+                readThreadTcs.TrySetCanceled(token);
             });
 
-            // Start the heartbeat poke loop in the background
+            // Start heartbeat poke loop and async non-blocking ACK queue worker
             pokeTask = PokeLoopAsync(token);
+            ackTask = AckWorkerLoopAsync(token);
 
             // Run blocking read on a background thread so we can join it cleanly before disposing
             readThread = new Thread(() =>
             {
                 try
                 {
-                    byte[] readBuffer = new byte[_mainInterface.InPipe.MaximumPacketSize];
+                    int bufferCapacity = Math.Max(512, _mainInterface.InPipe.MaximumPacketSize);
+                    byte[] readBuffer = new byte[bufferCapacity];
+                    int residualBytes = 0;
 
                     while (keepReading && !token.IsCancellationRequested)
                     {
                         int bytesRead = -1;
                         try
                         {
-                            bytesRead = _mainInterface.InPipe.Read(readBuffer);
+                            bytesRead = _mainInterface.InPipe.Read(readBuffer, residualBytes, bufferCapacity - residualBytes);
                         }
                         catch
                         {
@@ -123,8 +131,12 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
                             break;
                         }
 
+                        if (bytesRead <= 0) break;
+
+                        int totalAvailable = residualBytes + bytesRead;
                         int offset = 0;
-                        while (offset + 4 <= bytesRead)
+
+                        while (offset + 4 <= totalAvailable)
                         {
                             byte cmdId = readBuffer[offset];
                             byte flagsClient = readBuffer[offset + 1];
@@ -133,13 +145,16 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
                             byte clientId = (byte)(flagsClient & 0x07);
 
                             int totalMsgLen = 4 + payloadLen;
-                            if (offset + totalMsgLen > bytesRead)
+                            if (offset + totalMsgLen > totalAvailable)
+                            {
+                                // Unparsed partial GIP frame at end of buffer
                                 break;
+                            }
 
-                            // If packet requires acknowledgement, send Ack immediately
+                            // If packet requires acknowledgement, enqueue Ack asynchronously without stalling read loop
                             if ((flagsClient & 0x10) != 0)
                             {
-                                SendAck(cmdId, flagsClient, seq, totalMsgLen);
+                                EnqueueAck(cmdId, flagsClient, seq, totalMsgLen);
                             }
 
                             // Handle Arrival (0x02) - Guitar is connecting/syncing!
@@ -200,13 +215,21 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
                             }
                             else if (cmdId == 0x20)
                             {
-                                // 0x20 is the standard Xbox One GIP navigation packet (D-pad & standard axes).
-                                // It lacks White 2 and White 3 frets. We intentionally do NOT emit 0x20 as
-                                // instrument state to prevent it from clobbering active 6-fret strumming state.
                                 IsSynced = true;
                             }
 
                             offset += totalMsgLen;
+                        }
+
+                        // Shift trailing unparsed bytes to index 0 for the next USB read transaction
+                        residualBytes = totalAvailable - offset;
+                        if (residualBytes > 0 && offset > 0)
+                        {
+                            Buffer.BlockCopy(readBuffer, offset, readBuffer, 0, residualBytes);
+                        }
+                        else if (residualBytes == 0)
+                        {
+                            residualBytes = 0;
                         }
                     }
                 }
@@ -218,6 +241,7 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
                 finally
                 {
                     IsSynced = false;
+                    readThreadTcs.TrySetResult();
                 }
             })
             {
@@ -228,11 +252,12 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
 
             readThread.Start();
 
-            // Await cancellation or until the read thread finishes
-            while (readThread.IsAlive && !token.IsCancellationRequested)
+            // Await completion via TaskCompletionSource instead of polling
+            try
             {
-                await Task.Delay(100, CancellationToken.None).ConfigureAwait(false);
+                await readThreadTcs.Task.ConfigureAwait(false);
             }
+            catch (OperationCanceledException) { }
         }
         catch (OperationCanceledException)
         {
@@ -290,8 +315,31 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
         _winUsbDevice = null;
     }
 
+    private void EnqueueAck(byte commandId, byte flagsClient, byte sequence, int bytesReceived)
+    {
+        _ackQueue.Enqueue((commandId, flagsClient, sequence, bytesReceived));
+        try { _ackSignal.Release(); } catch { }
+    }
+
+    private async Task AckWorkerLoopAsync(CancellationToken token)
+    {
+        try
+        {
+            while (!token.IsCancellationRequested)
+            {
+                await _ackSignal.WaitAsync(token).ConfigureAwait(false);
+                while (_ackQueue.TryDequeue(out var ackInfo))
+                {
+                    SendAck(ackInfo.cmdId, ackInfo.flagsClient, ackInfo.seq, ackInfo.totalMsgLen);
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
     private async Task PokeLoopAsync(CancellationToken token)
     {
+        byte[] clientBuf = new byte[8];
         try
         {
             while (!token.IsCancellationRequested)
@@ -300,22 +348,29 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
                 {
                     if (_mainInterface?.OutPipe != null)
                     {
-                        List<byte> clients;
+                        int clientCount = 0;
                         lock (_connectedClients)
                         {
-                            clients = _connectedClients.ToList();
+                            foreach (var client in _connectedClients)
+                            {
+                                if (clientCount < clientBuf.Length)
+                                {
+                                    clientBuf[clientCount++] = client;
+                                }
+                            }
                         }
 
-                        if (clients.Count == 0)
+                        if (clientCount == 0)
                         {
-                            // If no clients known yet, poke 0, 1, and 2 just in case
-                            clients.Add(0);
-                            clients.Add(1);
-                            clients.Add(2);
+                            clientBuf[0] = 0;
+                            clientBuf[1] = 1;
+                            clientBuf[2] = 2;
+                            clientCount = 3;
                         }
 
-                        foreach (var client in clients)
+                        for (int i = 0; i < clientCount; i++)
                         {
+                            byte client = clientBuf[i];
                             lock (_pokePacket)
                             {
                                 _pokePacket[1] = client;
