@@ -74,8 +74,8 @@
                                         </Grid.ColumnDefinitions>
                                         <Image Grid.Column="0" 
                                                Source="{x:Bind LogoPath}" 
-                                               Height="28" 
-                                               MaxWidth="48"
+                                               Height="24" 
+                                               MaxWidth="75"
                                                Stretch="Uniform" 
                                                VerticalAlignment="Center" 
                                                Margin="0,0,12,0"/>
