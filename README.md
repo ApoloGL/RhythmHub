@@ -1,5 +1,7 @@
 # RhythmHub
 
+![RhythmHub Banner](Assets/Banner.jpg)
+
 ![Build Status](https://img.shields.io/github/actions/workflow/status/ApoloGL/RhythmHub/release.yml?branch=master&style=flat-square&label=build)
 ![Release](https://img.shields.io/github/v/release/ApoloGL/RhythmHub?style=flat-square&color=blue&label=release)
 ![License](https://img.shields.io/github/license/ApoloGL/RhythmHub?style=flat-square&color=green)
