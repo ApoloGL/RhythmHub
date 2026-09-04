@@ -1,9 +1,9 @@
 # RhythmHub
 
-![Build Status](https://img.shields.io/github/actions/workflow/status/username/RhythmHub/build.yml?branch=main&style=flat-square)
-![Release](https://img.shields.io/github/v/release/username/RhythmHub?style=flat-square&color=blue)
-![License](https://img.shields.io/github/license/username/RhythmHub?style=flat-square&color=green)
-![Downloads](https://img.shields.io/github/downloads/username/RhythmHub/total?style=flat-square&color=orange)
+![Build Status](https://img.shields.io/github/actions/workflow/status/ApoloGL/RhythmHub/release.yml?branch=master&style=flat-square&label=build)
+![Release](https://img.shields.io/github/v/release/ApoloGL/RhythmHub?style=flat-square&color=blue&label=release)
+![License](https://img.shields.io/github/license/ApoloGL/RhythmHub?style=flat-square&color=green&label=license)
+![Downloads](https://img.shields.io/github/downloads/ApoloGL/RhythmHub/total?style=flat-square&color=orange&label=downloads)
 
 > **A modern, unified controller bridge and driver management app for rhythm game instruments on Windows.**
 
@@ -55,7 +55,7 @@ Additional dongle profiles will be added in future updates as physical hardware 
 ## Installation & Prerequisites
 
 ### 1. Download & Install
-Download the latest `RhythmHubSetup.exe` from the [Releases](https://github.com/username/RhythmHub/releases) page and run the installer. The wizard will set up RhythmHub in `C:\Program Files\RhythmHub` and create Start Menu and Desktop shortcuts.
+Download the latest `RhythmHubSetup.exe` from the [Releases](https://github.com/ApoloGL/RhythmHub/releases) page and run the installer. The wizard will set up RhythmHub in `C:\Program Files\RhythmHub` and create Start Menu and Desktop shortcuts.
 
 ### 2. Required Drivers
 
@@ -93,7 +93,7 @@ Download the latest `RhythmHubSetup.exe` from the [Releases](https://github.com/
 
 ### 1. Clone the Repository
 ```powershell
-git clone https://github.com/username/RhythmHub.git
+git clone https://github.com/ApoloGL/RhythmHub.git
 cd RhythmHub
 ```
 
