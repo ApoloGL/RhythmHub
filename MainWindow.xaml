@@ -100,10 +100,10 @@
                                         </StackPanel>
                                         <Image Grid.Column="2" 
                                                Source="ms-appx:///Assets/GHLiveLogo.png" 
-                                               Height="34" 
-                                               MaxWidth="34"
+                                               Height="44" 
+                                               MaxWidth="44"
                                                Stretch="Uniform" 
-                                               VerticalAlignment="Top" 
+                                               VerticalAlignment="Center" 
                                                HorizontalAlignment="Right"
                                                Margin="8,0,0,0"
                                                ToolTipService.ToolTip="Guitar Hero Live Receiver"/>
