@@ -278,7 +278,7 @@ public class DeviceManager : IDisposable
 
                                 if (existing == null)
                                 {
-                                    var provider = new XboxOneGhlProvider(winUsbDevPath, "GHLive Guitar (Xbox One WinUSB)", instanceId);
+                                    var provider = new XboxOneGhlProvider(winUsbDevPath, "GHLive Dongle (Xbox One)", instanceId);
                                     _activeProviders.Add(provider);
                                     OnDeviceAdded?.Invoke(provider);
                                     StartProvider(provider);
@@ -316,7 +316,7 @@ public class DeviceManager : IDisposable
                             bool alreadyAdded = _activeProviders.Any(p => string.Equals(p.DevicePath, hidDevice.DevicePath, StringComparison.OrdinalIgnoreCase));
                             if (!alreadyAdded)
                             {
-                                var provider = new GHLiveHidProvider(hidDevice, "GHLive Guitar (Wii/PS3 Native HID)");
+                                var provider = new GHLiveHidProvider(hidDevice, "GHLive Dongle (Wii/PS3)");
                                 _activeProviders.Add(provider);
                                 OnDeviceAdded?.Invoke(provider);
                                 StartProvider(provider);

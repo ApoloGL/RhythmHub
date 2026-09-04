@@ -34,7 +34,7 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
         0x22, 0x00, 0x00, 0x08, 0x02, 0x08, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00
     };
     
-    public XboxOneGhlProvider(string devicePath, string deviceName = "GHLive Guitar (Xbox One WinUSB)", string? instanceId = null)
+    public XboxOneGhlProvider(string devicePath, string deviceName = "GHLive Dongle (Xbox One)", string? instanceId = null)
     {
         _devicePath = devicePath;
         DeviceName = deviceName;
@@ -157,6 +157,9 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
                                 EnqueueAck(cmdId, flagsClient, seq, totalMsgLen);
                             }
 
+                            // Mark device as synced & active upon receiving valid communication
+                            IsSynced = true;
+
                             // Handle Arrival (0x02) - Guitar is connecting/syncing!
                             if (cmdId == 0x02)
                             {
@@ -165,14 +168,12 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
                                     _connectedClients.Add(clientId);
                                 }
                                 Console.WriteLine($"Xbox One Dongle: Received Arrival from guitar client {clientId}! Completing sync handshake...");
-                                IsSynced = true;
 
                                 byte[] getDesc = new byte[] { 0x04, (byte)(0x20 | clientId), 0x01, 0x00 };
                                 try { _mainInterface.OutPipe?.Write(getDesc); } catch { }
                             }
                             else if (cmdId == 0x04)
                             {
-                                IsSynced = true;
                                 Console.WriteLine($"Xbox One Dongle: Received Descriptor for client {clientId}. Sending PowerOn and Auth Success.");
 
                                 byte[] powerOn = new byte[] { 0x05, (byte)(0x20 | clientId), 0x02, 0x01, 0x00 };
@@ -189,7 +190,6 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
                                 if (payloadLen > 0)
                                 {
                                     bool connected = readBuffer[offset + 4] != 0;
-                                    IsSynced = connected;
                                     if (!connected)
                                     {
                                         lock (_connectedClients)
@@ -201,7 +201,6 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
                             }
                             else if (cmdId == 0x21)
                             {
-                                IsSynced = true;
                                 var state = _clientStates[clientId];
                                 ParseGhlPacket(readBuffer, offset, totalMsgLen, state);
                                 try
@@ -212,10 +211,6 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
                                 {
                                     Console.WriteLine($"Error notifying state changed: {ex.Message}");
                                 }
-                            }
-                            else if (cmdId == 0x20)
-                            {
-                                IsSynced = true;
                             }
 
                             offset += totalMsgLen;
@@ -377,6 +372,7 @@ public class XboxOneGhlProvider : IDeviceProvider, IDisposable
                                 _mainInterface.OutPipe.Write(_pokePacket);
                             }
                         }
+                        IsSynced = true;
                     }
                 }
                 catch (Exception ex)
