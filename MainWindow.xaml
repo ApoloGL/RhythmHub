@@ -72,13 +72,13 @@
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
-                                        <FontIcon Grid.Column="0" 
-                                                  Glyph="{x:Bind IconGlyph}" 
-                                                  FontFamily="Segoe Fluent Icons" 
-                                                  FontSize="24" 
-                                                  Foreground="{StaticResource AccentBrush}" 
-                                                  VerticalAlignment="Top" 
-                                                  Margin="0,2,10,0"/>
+                                        <Image Grid.Column="0" 
+                                               Source="{x:Bind LogoPath}" 
+                                               Height="28" 
+                                               MaxWidth="48"
+                                               Stretch="Uniform" 
+                                               VerticalAlignment="Center" 
+                                               Margin="0,0,12,0"/>
                                         <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
                                             <TextBlock Text="{x:Bind DeviceName}" 
                                                        FontSize="15" 

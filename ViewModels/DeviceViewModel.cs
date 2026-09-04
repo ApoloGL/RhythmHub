@@ -21,7 +21,12 @@ public partial class DeviceViewModel : ObservableObject
         _ => "Native HID"
     };
 
-    public string IconGlyph => "\xE7FC"; // Segoe Fluent Icons Game controller glyph
+    public string LogoPath => Provider switch
+    {
+        Providers.XboxOneGhlProvider or Providers.XboxOneDefaultDriverProvider => "ms-appx:///Assets/XboxLogo.png",
+        Providers.GHLiveHidProvider => "ms-appx:///Assets/WiiPSLogo.png",
+        _ => "ms-appx:///Assets/GHLiveLogo.png"
+    };
 
     public Microsoft.UI.Xaml.Visibility SyncInstructionVisibility => 
         IsWaitingForSync ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
