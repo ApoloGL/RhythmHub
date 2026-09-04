@@ -4,7 +4,7 @@ namespace RhythmHub.Providers;
 
 public class XboxOneDefaultDriverProvider : IDeviceProvider
 {
-    public string DeviceName => "Xbox One GHL Dongle (Default Driver)";
+    public string DeviceName => "GHLive Dongle (Xbox One)";
     public string DevicePath { get; }
     public string? InstanceId { get; }
     public bool IsSynced => true;

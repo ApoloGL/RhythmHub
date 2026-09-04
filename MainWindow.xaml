@@ -35,94 +35,128 @@
                 <TextBlock Text="Plug in a receiver to get started." Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
             </StackPanel>
 
-            <!-- Grid of Cards -->
-            <GridView Visibility="{x:Bind ViewModel.HasDevices, Mode=OneWay}"
-                      ItemsSource="{x:Bind ViewModel.ConnectedDevices}"
-                      SelectionMode="None"
-                      Padding="40"
-                      HorizontalAlignment="Stretch">
-                <GridView.ItemTemplate>
-                    <DataTemplate x:DataType="viewmodels:DeviceViewModel">
-                        <Border Background="{StaticResource CardBackgroundBrush}" 
-                                CornerRadius="8" 
-                                Padding="20" 
-                                Margin="10" 
-                                Width="320" 
-                                MinHeight="220"
-                                BorderThickness="1"
-                                BorderBrush="#2A2A35">
-                            <Border.Shadow>
-                                <ThemeShadow/>
-                            </Border.Shadow>
+            <!-- Cards List -->
+            <ScrollViewer Visibility="{x:Bind ViewModel.HasDevices, Mode=OneWay}"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{x:Bind ViewModel.ConnectedDevices}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Vertical" Spacing="0" Padding="4,6"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="viewmodels:DeviceViewModel">
+                            <Border Background="{StaticResource CardBackgroundBrush}" 
+                                    CornerRadius="8" 
+                                    Padding="14" 
+                                    Margin="12,5" 
+                                    MaxWidth="460"
+                                    HorizontalAlignment="Stretch"
+                                    BorderThickness="1"
+                                    BorderBrush="#2A2A35">
+                                <Border.Shadow>
+                                    <ThemeShadow/>
+                                </Border.Shadow>
 
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="*"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
 
-                                <!-- Header: Icon + Title + Protocol -->
-                                <StackPanel Grid.Row="0" Spacing="5">
-                                    <StackPanel Orientation="Horizontal" Spacing="10">
-                                        <FontIcon Glyph="{x:Bind IconGlyph}" FontFamily="Segoe Fluent Icons" FontSize="24" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
-                                        <TextBlock Text="{x:Bind DeviceName}" FontSize="20" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                                    </StackPanel>
-                                    <Border Background="#2D2D38" CornerRadius="4" Padding="6,2" HorizontalAlignment="Left" Margin="34,0,0,0">
-                                        <TextBlock Text="{x:Bind ProtocolName}" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
-                                    </Border>
-                                </StackPanel>
-
-                                <!-- Status -->
-                                <StackPanel Grid.Row="1" Spacing="8" Margin="0,20,0,20">
-                                    <TextBlock Text="STATUS" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" CharacterSpacing="50"/>
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <Ellipse Width="12" Height="12" Fill="{x:Bind StatusColor, Mode=OneWay}"/>
-                                        <TextBlock Text="{x:Bind ConnectionStatus, Mode=OneWay}" FontSize="14" Foreground="{StaticResource TextPrimaryBrush}"/>
-                                    </StackPanel>
-                                    <TextBlock Text="{x:Bind SyncInstruction, Mode=OneWay}" 
-                                               Visibility="{x:Bind SyncInstructionVisibility, Mode=OneWay}" 
-                                               Foreground="{StaticResource AccentBrush}" 
-                                               FontSize="12" 
-                                               TextWrapping="Wrap"/>
-                                </StackPanel>
-
-                                <!-- Actions -->
-                                <StackPanel Grid.Row="2" Spacing="8">
-                                    <Button Command="{x:Bind ResetDongleCommand}" 
-                                            CommandParameter="{x:Bind}"
-                                            Background="#2D2D38" BorderBrush="#444455"
-                                            HorizontalAlignment="Stretch"
-                                            ToolTipService.ToolTip="Refresh and re-initialize this dongle">
-                                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                                            <FontIcon Glyph="&#xE72C;" FontSize="13" Foreground="{StaticResource AccentBrush}"/>
-                                            <TextBlock Text="Reset Dongle" FontSize="13" FontWeight="SemiBold"/>
+                                    <!-- Header: Icon + Title + Driver Badge -->
+                                    <Grid Grid.Row="0" Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <FontIcon Grid.Column="0" 
+                                                  Glyph="{x:Bind IconGlyph}" 
+                                                  FontFamily="Segoe Fluent Icons" 
+                                                  FontSize="24" 
+                                                  Foreground="{StaticResource AccentBrush}" 
+                                                  VerticalAlignment="Top" 
+                                                  Margin="0,2,10,0"/>
+                                        <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock Text="{x:Bind DeviceName}" 
+                                                       FontSize="15" 
+                                                       FontWeight="Bold" 
+                                                       Foreground="{StaticResource TextPrimaryBrush}" 
+                                                       TextWrapping="Wrap"
+                                                       TextTrimming="None"
+                                                       VerticalAlignment="Center"/>
+                                            <Border Background="#2D2D38" 
+                                                    CornerRadius="4" 
+                                                    Padding="6,2" 
+                                                    HorizontalAlignment="Left">
+                                                <TextBlock Text="{x:Bind ProtocolName}" 
+                                                           FontSize="11" 
+                                                           FontWeight="SemiBold" 
+                                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                                            </Border>
                                         </StackPanel>
-                                    </Button>
+                                    </Grid>
 
-                                    <Button Content="Revert to Default Driver" 
-                                            Command="{x:Bind RevertDriverCommand}" 
-                                            CommandParameter="{x:Bind}"
-                                            Visibility="{x:Bind RevertDriverVisibility, Mode=OneWay}"
-                                            Background="#2D2D38" BorderBrush="#444455"
-                                            HorizontalAlignment="Stretch"
-                                            FontSize="12"
-                                            ToolTipService.ToolTip="Restore factory Microsoft Xbox driver"/>
+                                    <!-- Status -->
+                                    <StackPanel Grid.Row="1" Spacing="6" Margin="0,4,0,14">
+                                        <TextBlock Text="STATUS" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" CharacterSpacing="50"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                            <Ellipse Width="10" Height="10" Fill="{x:Bind StatusColor, Mode=OneWay}" VerticalAlignment="Center"/>
+                                            <FontIcon Glyph="&#xE703;" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="{x:Bind StatusColor, Mode=OneWay}" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{x:Bind ConnectionStatus, Mode=OneWay}" FontSize="13" FontWeight="Medium" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <TextBlock Text="{x:Bind SyncInstruction, Mode=OneWay}" 
+                                                   Visibility="{x:Bind SyncInstructionVisibility, Mode=OneWay}" 
+                                                   Foreground="{StaticResource AccentBrush}" 
+                                                   FontSize="12" 
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
 
-                                    <Button Content="Switch to WinUSB Driver" 
-                                            Command="{x:Bind SwitchToWinUsbCommand}" 
-                                            CommandParameter="{x:Bind}"
-                                            Visibility="{x:Bind SwitchToWinUsbVisibility, Mode=OneWay}"
-                                            Background="#0078D4" Foreground="White" BorderThickness="0"
-                                            HorizontalAlignment="Stretch"
-                                            FontSize="12"
-                                            ToolTipService.ToolTip="Install WinUSB driver to use RhythmHub's built-in mapper"/>
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </GridView.ItemTemplate>
-            </GridView>
+                                    <!-- Actions -->
+                                    <StackPanel Grid.Row="2" Spacing="6">
+                                        <Button Command="{x:Bind ResetDongleCommand}" 
+                                                CommandParameter="{x:Bind}"
+                                                Background="#2D2D38" BorderBrush="#444455"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Center"
+                                                Padding="0,6"
+                                                ToolTipService.ToolTip="Refresh and re-initialize this dongle">
+                                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                                <FontIcon Glyph="&#xE72C;" FontSize="12" Foreground="{StaticResource AccentBrush}"/>
+                                                <TextBlock Text="Reset Dongle" FontSize="12" FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                        </Button>
+
+                                        <Button Content="Revert to Default Driver" 
+                                                Command="{x:Bind RevertDriverCommand}" 
+                                                CommandParameter="{x:Bind}"
+                                                Visibility="{x:Bind RevertDriverVisibility, Mode=OneWay}"
+                                                Background="#2D2D38" BorderBrush="#444455"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Center"
+                                                Padding="0,6"
+                                                FontSize="12"
+                                                ToolTipService.ToolTip="Restore factory Microsoft Xbox driver"/>
+
+                                        <Button Content="Switch to WinUSB Driver" 
+                                                Command="{x:Bind SwitchToWinUsbCommand}" 
+                                                CommandParameter="{x:Bind}"
+                                                Visibility="{x:Bind SwitchToWinUsbVisibility, Mode=OneWay}"
+                                                Background="#0078D4" Foreground="White" BorderThickness="0"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Center"
+                                                Padding="0,6"
+                                                FontSize="12"
+                                                ToolTipService.ToolTip="Install WinUSB driver to use RhythmHub's built-in mapper"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
             
             <!-- USB Hotplug Notification Banner -->
             <InfoBar Grid.Row="1" 

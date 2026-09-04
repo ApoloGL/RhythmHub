@@ -26,6 +26,51 @@ public sealed partial class MainWindow : Window
 
         // 2. Configure AppWindow caption buttons & taskbar icon
         SetupTitleBarAndIcon();
+
+        // 3. Listen to ConnectedDevices changes to dynamically adjust window height
+        ViewModel.ConnectedDevices.CollectionChanged += ConnectedDevices_CollectionChanged;
+        UpdateWindowSize();
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+    private void ConnectedDevices_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        this.DispatcherQueue.TryEnqueue(() =>
+        {
+            UpdateWindowSize();
+        });
+    }
+
+    private void UpdateWindowSize()
+    {
+        if (_appWindow == null) return;
+
+        IntPtr hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        uint dpi = GetDpiForWindow(hWnd);
+        double scale = (dpi > 0) ? (dpi / 96.0) : 1.0;
+
+        int count = ViewModel.ConnectedDevices.Count;
+        int dipWidth = 480;
+        int dipHeight;
+
+        if (count <= 1)
+        {
+            // Starting size is twice the height of one card (~215 DIP card * 2 + 48 DIP titlebar)
+            dipHeight = 480;
+        }
+        else
+        {
+            // TitleBar (48) + Container Margins (20) + per-card height (~220 DIPs)
+            int calculatedHeight = 48 + 20 + (count * 220);
+            dipHeight = Math.Clamp(calculatedHeight, 480, 850);
+        }
+
+        int physicalWidth = (int)Math.Round(dipWidth * scale);
+        int physicalHeight = (int)Math.Round(dipHeight * scale);
+
+        _appWindow.Resize(new Windows.Graphics.SizeInt32(physicalWidth, physicalHeight));
     }
 
     private void SetupTitleBarAndIcon()
@@ -36,6 +81,14 @@ public sealed partial class MainWindow : Window
 
         if (_appWindow != null)
         {
+            uint dpi = GetDpiForWindow(hWnd);
+            double scale = (dpi > 0) ? (dpi / 96.0) : 1.0;
+            
+            // Initial window size (480x480 DIPs = twice card height)
+            int initWidth = (int)Math.Round(480 * scale);
+            int initHeight = (int)Math.Round(480 * scale);
+            _appWindow.Resize(new Windows.Graphics.SizeInt32(initWidth, initHeight));
+
             // Set Taskbar & Window Icon
             string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "AppLogo.ico");
             if (File.Exists(iconPath))
@@ -103,5 +156,6 @@ public sealed partial class MainWindow : Window
         }
 
         await ViewModel.InitializeAsync();
+        UpdateWindowSize();
     }
 }

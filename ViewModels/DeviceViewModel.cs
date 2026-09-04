@@ -13,8 +13,15 @@ public partial class DeviceViewModel : ObservableObject
 
     public string SyncInstruction => "Please press the Sync button on your guitar!";
 
-    public string ProtocolName => Provider is Providers.XboxOneGhlProvider ? "Xbox One WinUSB" : "Xbox One Native HID";
-    public string IconGlyph => "\xE990"; // Segoe Fluent Icons Gamepad
+    public string ProtocolName => Provider switch
+    {
+        Providers.XboxOneGhlProvider => "WinUSB Driver",
+        Providers.XboxOneDefaultDriverProvider => "Default Driver",
+        Providers.GHLiveHidProvider => "Native HID",
+        _ => "Native HID"
+    };
+
+    public string IconGlyph => "\xE7FC"; // Segoe Fluent Icons Game controller glyph
 
     public Microsoft.UI.Xaml.Visibility SyncInstructionVisibility => 
         IsWaitingForSync ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;

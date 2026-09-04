@@ -20,7 +20,7 @@ public class GHLiveHidProvider : IDeviceProvider, IDisposable
     private readonly HidDevice _device;
     private SafeFileHandle? _handle;
 
-    public GHLiveHidProvider(HidDevice device, string deviceName = "GHLive Guitar (Native HID)")
+    public GHLiveHidProvider(HidDevice device, string deviceName = "GHLive Dongle (Wii/PS3)")
     {
         _device = device;
         DeviceName = deviceName;
