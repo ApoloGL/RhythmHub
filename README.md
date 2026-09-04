@@ -2,8 +2,8 @@
 
 ![Build Status](https://img.shields.io/github/actions/workflow/status/ApoloGL/RhythmHub/release.yml?branch=master&style=flat-square&label=build)
 ![Release](https://img.shields.io/github/v/release/ApoloGL/RhythmHub?style=flat-square&color=blue&label=release)
-![License](https://img.shields.io/github/license/ApoloGL/RhythmHub?style=flat-square&color=green&label=license)
-![Downloads](https://img.shields.io/github/downloads/ApoloGL/RhythmHub/total?style=flat-square&color=orange&label=downloads)
+![License](https://img.shields.io/github/license/ApoloGL/RhythmHub?style=flat-square&color=green)
+![Downloads](https://img.shields.io/github/downloads/ApoloGL/RhythmHub/total?style=flat-square&color=orange)
 
 > **A modern, unified controller bridge and driver management app for rhythm game instruments on Windows.**
 
